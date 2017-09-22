@@ -1,7 +1,7 @@
-/*  Names:
-    Section:
-    Date:
-    File name:
+/*  Names: David Dawnkaski, David Hoddinott, Jing Wei Li
+    Section: 4
+    Date: 09/22/17
+    File name: lab1-2.c
     Description:
 */
 /*
@@ -78,13 +78,9 @@ void main(void)
             TR0 = 1; // turn timer on
 			TMR0 = 0 ;
             while (Counts <225);//wait for 1s
-			printf("counts after 1 second is %d and tries are %d",Counts,tries);
-            //TR0 = 0;    // Timer 0 disable;
-			//if (Counts >= 225) {Counts = 0;}
             record_inputs();
 			results();
 			Counts = 0;
-
 
             if (tries >= 10){
                 game_over();
@@ -95,22 +91,18 @@ void main(void)
 
 void set_outputs(void){
     scenario = random(); // generate random number
-	printf("\r random number is %d \n", scenario);
     switch (scenario){
         case 0: //light led 0
             LED0 = 0;
 			LED1 = 1;
-			printf("\r case 0\n");
 			break;
         case 1: // light led1
             LED1 = 0;
 			LED0 = 1;
-			printf("\r case 1 \n");
 			break;
         case 2: // light both leds
             LED1 = 0;
             LED0 = 0;
-			printf("\r case 2\n");
 			break;
 		default:
 			break;
@@ -156,9 +148,6 @@ void game_over(void){
 //***************
 void Port_Init(void)
 {
-    // use Port configuration from Lab 1-1
-    // adding the output bit for LED1
-	// Port 2
     P2MDOUT &= 0xFE;
     P2 |= ~0xFE;
 
@@ -186,7 +175,6 @@ void Timer_Init(void)
 void Timer0_ISR(void) __interrupt 1
 {
     Counts ++;
-	//printf ("\r\n interrupt count is %d", Counts);
 }
 
 /******************************************************************************/
