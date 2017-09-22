@@ -25,7 +25,6 @@ int getRandom(void);
 void gameControl(void);
 int isPBOneOn(void);//function that checks PushButton 1
 int isPBTwoOn(void);// function that checks PushButton 2
-//int randArray[3] = {0,1,2};
 void set_outputs(void);
 void record_inputs(void);
 void results(void);
@@ -37,7 +36,7 @@ void game_over(void);
 __sbit __at 0xB3 BILED1;
 __sbit __at 0xB4 BILED2;
 __sbit __at 0xB6 LED0; // LED0, associated with Port 3 Pin 6
-__sbit __at 0xB6 LED1; // LED0, associated with Port 3 Pin 6
+__sbit __at 0xB5 LED1; // LED0, associated with Port 3 Pin 5
 
 __sbit __at 0xB1 PB1;
 __sbit __at 0xB1 PB2; // Push button 2, P3.1
@@ -45,7 +44,6 @@ __sbit __at 0xA0 SS;    // Slide Switch associated with Port 2 Pin 0
 // sbit settings are incomplete, include those developed 
 // in Lab 1-1 and add the sbit setting for LED1
 unsigned int Counts = 0;
-unsigned int correct_count = 0;
 unsigned int tries = 0;
 unsigned int wins = 0;
 unsigned char scenario;
@@ -78,12 +76,17 @@ void main(void)
         while( SS ) { // while SS0 is ON (high)
             set_outputs();
             TR0 = 1; // turn timer on
-            while (Counts < 225);//wait for 1s
-            TR0 = 0;    // Timer 0 disabled
+			TMR0 = 0 ;
+            while (Counts <225);//wait for 1s
+			printf("counts after 1 second is %d and tries are %d",Counts,tries);
+            //TR0 = 0;    // Timer 0 disable;
+			//if (Counts >= 225) {Counts = 0;}
             record_inputs();
-            tries ++;
+			results();
+			Counts = 0;
 
-            if (tries == 10){
+
+            if (tries >= 10){
                 game_over();
             }
         }
@@ -92,14 +95,23 @@ void main(void)
 
 void set_outputs(void){
     scenario = random(); // generate random number
+	printf("\r random number is %d \n", scenario);
     switch (scenario){
         case 0: //light led 0
             LED0 = 0;
+			LED1 = 1;
+			printf("\r case 0\n");
+			break;
         case 1: // light led1
             LED1 = 0;
+			LED0 = 1;
+			printf("\r case 1 \n");
+			break;
         case 2: // light both leds
             LED1 = 0;
             LED0 = 0;
+			printf("\r case 2\n");
+			break;
 		default:
 			break;
     }
@@ -133,6 +145,8 @@ void game_over(void){
     printf("You have scored %d wins, switch off and on to play again",wins);
     wins = 0;
     tries = 0;
+	LED1 = 1;
+    LED0 = 1;
     while (SS);
 }
 
@@ -161,10 +175,6 @@ void Interrupt_Init(void)
 //***************
 void Timer_Init(void)
 {
-
-//    CKCON |= _____;  // Timer0 uses SYSCLK as source
-//    TMOD &= _____;   // clear the 4 least significant bits
-//    TMOD |= _____;   // Timer0 in mode 1
     CKCON &= ~0x08;  // Timer0 uses SYSCLK/12
     TMOD &= 0xF0 ;   // clear the 4 least significant bits - 13 bit
     TR0 = 0;         // Stop Timer0
@@ -176,8 +186,7 @@ void Timer_Init(void)
 void Timer0_ISR(void) __interrupt 1
 {
     Counts ++;
-// add interrupt code here, in this lab, the code will increment the 
-// global variable 'counts'
+	//printf ("\r\n interrupt count is %d", Counts);
 }
 
 /******************************************************************************/
@@ -190,7 +199,6 @@ void Timer0_ISR(void) __interrupt 1
 unsigned char random(void)
 {	
 	unsigned char rand_var = rand() % 3;
-	printf("random number is %d \n", rand_var);
     return (rand_var);  // rand returns a random number between 0 and 32767.
                         // the mod operation (%) returns the remainder of 
                         // dividing this value by 2 and returns the result,
