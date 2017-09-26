@@ -21,8 +21,6 @@ void Timer_Init(void);     // Initialize Timer 0
 void Interrupt_Init(void); //Initialize interrupts
 void Timer0_ISR(void) __interrupt 1;
 unsigned char random(void);
-int getRandom(void);
-void gameControl(void);
 int isPBOneOn(void);//function that checks PushButton 1
 int isPBTwoOn(void);// function that checks PushButton 2
 void set_outputs(void);
@@ -48,7 +46,7 @@ unsigned int tries = 0;
 unsigned int wins = 0;
 unsigned char scenario;
 unsigned char user_input;
-
+unsigned int last;
 __sbit __at 0x8c TR0;// timer 0
 __sbit __at 0xA9 ET0;
 __sbit __at 0xAF EA;
@@ -65,16 +63,20 @@ void main(void)
 
     putchar(' ');    // the quote fonts may not copy correctly into SiLabs IDE
     printf("Start\r\n");
-
+	last = 11;
     while (1) /* the following loop prints the number of overflows that occur
                 while the pushbutton is pressed, the BILED is lit while the
                 button is pressed */
     {
-        BILED1 = 0;  // Turn OFF the BILED
-        BILED2 = 0;
+        BILED1 = 1;  // Turn OFF the BILED
+        BILED2 = 1;
+		LED0 = 1;
+		LED1 = 1;
+		TR0 = 0;
 
         while( SS ) { // while SS0 is ON (high)
-            set_outputs();
+            
+			set_outputs();
             TR0 = 1; // turn timer on
 			TMR0 = 0 ;
             while (Counts <225);//wait for 1s
@@ -91,7 +93,8 @@ void main(void)
 
 void set_outputs(void){
     scenario = random(); // generate random number
-    switch (scenario){
+    //printf("set_outputs\r\n");
+	switch (scenario){
         case 0: //light led 0
             LED0 = 0;
 			LED1 = 1;
@@ -106,7 +109,8 @@ void set_outputs(void){
 			break;
 		default:
 			break;
-    }
+    
+	}
 }
 
 void record_inputs(void){
@@ -119,6 +123,7 @@ void record_inputs(void){
     } else { // no user input
         user_input = 3;
     }
+	//printf("record_inputs\r\n");
 }
 void results(void){
     if (scenario == user_input){
@@ -131,15 +136,17 @@ void results(void){
         BILED1 = 1;
         BILED2 = 0;
     }
+	//printf("results\r\n");
 }
 
 void game_over(void){
-    printf("You have scored %d wins, switch off and on to play again",wins);
+    printf("You have scored %d wins, switch off and on to play again\r\n",wins);
     wins = 0;
     tries = 0;
 	LED1 = 1;
     LED0 = 1;
     while (SS);
+	//printf("game_over\r\n");
 }
 
 
@@ -154,6 +161,7 @@ void Port_Init(void)
 	P3MDOUT &= 0x03;
 	P3MDOUT |= 0xF8;
 	P3 |= ~0x03;
+
 }
 
 void Interrupt_Init(void)
@@ -186,11 +194,22 @@ void Timer0_ISR(void) __interrupt 1
 /*return a random integer number between 0 and 1*/
 unsigned char random(void)
 {	
-	unsigned char rand_var = rand() % 3;
-    return (rand_var);  // rand returns a random number between 0 and 32767.
+	
+	unsigned int rand_var = rand() % 3;
+    while (last == rand_var)
+	{
+		rand_var = rand() % 3;
+		//printf("rand while loop\r\n");
+	}
+	
+	//printf("last: %d, randvar: %d\r\n",last,rand_var);
+	last = rand_var;
+	
+	return (rand_var);  // rand returns a random number between 0 and 32767.
                         // the mod operation (%) returns the remainder of 
-                        // dividing this value by 2 and returns the result,
-                        // a value of either 0 or 1 or 3;
+                        // dividing this value by 3 and returns the result,
+                        // a value of either 0 or 1 or 2;
+	
 }
 
 int isPBOneOn(void) {
