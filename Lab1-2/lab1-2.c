@@ -36,7 +36,7 @@ __sbit __at 0xB4 BILED2;
 __sbit __at 0xB6 LED0; // LED0, associated with Port 3 Pin 6
 __sbit __at 0xB5 LED1; // LED0, associated with Port 3 Pin 5
 
-__sbit __at 0xB1 PB1;
+__sbit __at 0xB0 PB1; // push button 1, p3.0
 __sbit __at 0xB1 PB2; // Push button 2, P3.1
 __sbit __at 0xA0 SS;    // Slide Switch associated with Port 2 Pin 0
 // sbit settings are incomplete, include those developed 
