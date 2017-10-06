@@ -27,14 +27,15 @@ void mode2(void);
 void turn_off_LEDs(void);
 void random_to_LED(unsigned char rand);
 void wait_n_seconds(float n);
+void debounce(void);
+unsigned int convert_to_decimal();
 
-
-// global variables TODO: Complete Global variables init
 unsigned int Counts = 0;
+unsigned int debounce_counter = 0;
 unsigned int scores = 0;
 unsigned int total_scores = 0;
 unsigned char input, last;
-unsigned int wait_time,bit1, bit2, bit3, time_elapsed;
+unsigned int wait_time, time_elapsed;
 unsigned int loop_count = 0;
 unsigned int i = 0;
 
@@ -61,7 +62,6 @@ __sbit __at 0xB0 LED3; // LEd3 at p3.0
 
 /* This program demonstrates how to perform an A/D Conversion */
 void main() {
-    unsigned char result;
     Sys_Init(); /* Initialize the C8051 board */
     Port_Init(); /* Configure ports for analog input */
     putchar(' ');      // the quote fonts may not copy correctly into SiLabs IDE
@@ -74,19 +74,23 @@ void main() {
         turn_off_LEDs();
         BUZZER= 1;
         TR0 = 0;
-        printf("\r\n instructions to be completed later");
+        printf("\r\n You have activated a microprocessor controlled game. You get 8 turns in each mode."
+                       "\r\n Turn on turn slide switch to select mode 1"
+                       "\r\n   Mode1: Convert the binary number indicated by 3 LEDS to decimal and enter it thru keyboard ASAP "
+                       "\r\n Turn slide switch off to select mode 2"
+                       "\r\n   Mode2: Convert the hex number shown in terminal to binary and enter it thru 3 pushbuttons ASAP"
+                       "\r\n Push the first pushbutton to start");
+        debounce();
         while(!isPBZeroOn()); // wait until the first pushbutton is pressed
-        result = read_AD_input(1); /* Read the A/D value on P1.0 */
+        debounce();
         wait_time = determine_wait_time(read_AD_input(1)); // get the A/D value, then convert it to wait time
         if (SS){
-           mode1();
+            mode1();
         } else {
             mode2();
         }
     }
 }
-
-
 
 void Port_Init(void)
 {
@@ -123,9 +127,7 @@ unsigned char random(void) {
     unsigned int rand_var = rand() % 8;
     while (last == rand_var) {
         rand_var = rand() % 8;
-        //printf("rand while loop\r\n");
     }
-    //printf("last: %d, randvar: %d\r\n",last,rand_var);
     last = rand_var;
     return rand_var;
 }
@@ -138,6 +140,7 @@ void Interrupt_Init(void) {
 
 void Timer0_ISR(void) __interrupt 1 {
     Counts ++;
+    debounce_counter ++;
 }
 
 void Timer_Init(void)
@@ -181,19 +184,32 @@ void random_to_LED(unsigned char rand){
 	}
 }
 
+unsigned int convert_to_decimal(){
+    unsigned int bits[3] = {0,0,0};// stores the 3 bits of the led
+    if (LED0 == 0) bits[0] = 1;
+    if (LED1 == 0) bits[1] = 1;
+    if (LED2 == 0) bits[2] = 1;
+    return 4 * bits[0] + 2 * bits[1] + 1 * bits[2];
+}
+
 void wait_n_seconds(float n){
     Counts = 0;
     while (Counts < n * 225);
 }
 
+void debounce(void){
+    debounce_counter = 0;
+    while(debounce_counter < 4); // wait for about 15ms to debounce
+}
+
 void mode1(){
-    unsigned int total_score = 0;
-    printf("\r\n mode1 : instructions to be completed");
+    total_scores = 0;
+    printf("\r\n   Mode1: Convert the binary number indicated by 3 LEDS to decimal and enter it thru keyboard ASAP");
     turn_off_LEDs();
     loop_count = 0;
     while (loop_count < 8) {
         unsigned char rand_num = random();//generate a number between 0 and 7
-        random_to_LED(rand_num);
+        random_to_LED(rand_num); // lit leds according to random number
         time_elapsed = Counts;
         input = getchar();
         time_elapsed = Counts - time_elapsed; // get the time elasped between displaying LED and pressing
@@ -209,15 +225,16 @@ void mode1(){
             scores = 0;
         } else {
             scores = 10 - (10 * time_elapsed)/wait_time;
-            total_score += scores;
+            total_scores += scores;
         }
-        printf("\r\nTry score is %d and total score is %d",scores,total_score);
+        printf("\r\nTry score is %d and total score is %d",scores,total_scores);
         wait_n_seconds(0.5); //delay 0.5s
         BILED1 = 1;
         BILED2 = 1; // turn off biled
         loop_count ++;
     }
-    printf("\r\nThe final score is %d",total_score);
+    turn_off_LEDs();
+    printf("\r\nThe final score is %d",total_scores);
     BUZZER = 0; // turn on buzzer
     wait_n_seconds(0.5);
     BUZZER = 1;
@@ -225,15 +242,50 @@ void mode1(){
 }
 
 void mode2(){
-    printf("\r\n mode2 : instructions to be completed");
+    total_scores = 0;
+    printf("\r\n Mode2: Convert the hex number shown in terminal to binary and enter it thru 3 pushbuttons ASAP");
     turn_off_LEDs();
     loop_count = 0;
+    BUZZER = 0; // Turn on buzzer for .5 s
+    wait_n_seconds(0.5);
+    BUZZER = 1;
     while (loop_count < 8) {
         unsigned char rand_num = random();//generate a number between 0 and 7
-
+        printf("The random hexadecimal is 0x%d",rand_num); //display hex num
+        Counts = 0;
+        while (Counts < wait_time){
+            debounce();
+            if(isPBOneOn()) {
+                LED0 = !LED0;
+            } else if (isPBTwoOn()){
+                LED1 = !LED1;
+            } else if (isPBThreeOn()){
+                LED2 = !LED2;
+            }
+            debounce();
+        }
+        if (convert_to_decimal() == rand_num){ // calculate binary from LEDs, then lit biled
+            BILED1 = 0; // biled green
+            BILED2 = 1;
+            scores = 10; // determine scores
+            total_scores += 10;
+        } else {
+            BILED1 = 1; //biled red
+            BILED2 = 0;
+            scores = 0;
+        }
+        printf("\r\nTry score is %d and total score is %d",scores,total_scores);
+        wait_n_seconds(0.5);
+        BILED1 = 1;
+        BILED2 = 1; // turn off biled
 
         loop_count ++;
     }
+    turn_off_LEDs();
+    printf("\r\nThe final score is %d",total_scores);
+    BUZZER = 0; // turn on buzzer
+    wait_n_seconds(0.5);
+    BUZZER = 1;
 }
 
 int isPBZeroOn(void) {
