@@ -153,9 +153,8 @@ void Timer_Init(void)
 }
 
 unsigned char determine_wait_time(unsigned char ADResult){
-    unsigned char result = ADResult;
-    //TODO: complete wait time conversion
-    return result;
+	float slope = 3.97;
+    return (int)( slope * ADResult + 125 );
 }
 
 /*
@@ -289,7 +288,7 @@ void mode2(){
 }
 
 int isPBZeroOn(void) {
-    if (!PB0) return 1;
+    if (!PB3) return 1;
     else      return 0;
 }
 
@@ -303,7 +302,7 @@ int isPBTwoOn(void) {
     else      return 0;
 }
 int isPBThreeOn(void) {
-    if (!PB3) return 1;
+    if (!PB0) return 1;
     else      return 0;
 }
 
