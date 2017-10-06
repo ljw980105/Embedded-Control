@@ -34,10 +34,12 @@ unsigned int Counts = 0;
 unsigned int debounce_counter = 0;
 unsigned int scores = 0;
 unsigned int total_scores = 0;
-unsigned char input, last;
+unsigned char last = 55;//by having last initialized as something it can e=never be, the first time it is clalled a repeat will not occur
+unsigned char input;
 unsigned int wait_time, time_elapsed;
 unsigned int loop_count = 0;
 unsigned int i = 0;
+
 
 // SBIT Variables
 __sbit __at 0x8c TR0;// timer 0
@@ -46,19 +48,19 @@ __sbit __at 0xAF EA;
 
 __sbit __at 0x91 POT;  // potentiometer at p1.1
 
-__sbit __at 0xA4 PB3; // pushbutton 3 at P2.4
+__sbit __at 0xA4 PB0; // pushbutton 3 at P2.4
 __sbit __at 0xA2 PB1; // pushbutton 1 at P2.2
 __sbit __at 0xA3 PB2; // pushbutton 2 at P2.3
-__sbit __at 0xA1 PB0; // pushbutton 0 at P2.1
+__sbit __at 0xA1 PB3; // pushbutton 0 at P2.1
 __sbit __at 0xA0 SS; // slide switch at P2.0
 
 __sbit __at 0xB6 LED0; // LED0 at port 3.6
 __sbit __at 0xB7 BUZZER; // BUZZER at port 3.7
 __sbit __at 0xB4 BILED1; // BILED1 at p3.4
-__sbit __at 0xB5 LED1; // LEd1 at p3.5
+__sbit __at 0xB6 LED0; // LED0 at p3.5
 __sbit __at 0xB3 BILED2; // BILED2 at p3.3
-__sbit __at 0xB1 LED2; // LEd2 at p3.1
-__sbit __at 0xB0 LED3; // LEd3 at p3.0
+__sbit __at 0xB5 LED1; // LED1 at p3.1
+__sbit __at 0xB1 LED2; // LED2 at p3.0
 
 /* This program demonstrates how to perform an A/D Conversion */
 void main() {
@@ -71,24 +73,57 @@ void main() {
 
     while (1) { // begin infinite loop lol
         // turn off the LEDS, BILEDS and buzzer
-        turn_off_LEDs();
-        BUZZER= 1;
-        TR0 = 0;
+        
+		
+		turn_off_LEDs();
+        BUZZER= 0; // turn off buzzer
+        TR0 = 1;
         printf("\r\n You have activated a microprocessor controlled game. You get 8 turns in each mode."
                        "\r\n Turn on turn slide switch to select mode 1"
                        "\r\n   Mode1: Convert the binary number indicated by 3 LEDS to decimal and enter it thru keyboard ASAP "
                        "\r\n Turn slide switch off to select mode 2"
                        "\r\n   Mode2: Convert the hex number shown in terminal to binary and enter it thru 3 pushbuttons ASAP"
-                       "\r\n Push the first pushbutton to start");
+                       "\r\n Push the enter pushbutton to start");
         debounce();
-        while(!isPBZeroOn()); // wait until the first pushbutton is pressed
-        debounce();
+		//printf("\r\nafter first debounce");
+        while(!isPBThreeOn()); // wait until the first pushbutton is pressed
+        //printf("\r\nafter while not pb three on");
+		debounce();
+		//printf("\r\nafter second debounce");
         wait_time = determine_wait_time(read_AD_input(1)); // get the A/D value, then convert it to wait time
-        if (SS){
+        printf("\r\n %d is wait time",wait_time);
+		if (!SS){
             mode1();
         } else {
             mode2();
         }
+		/*
+		if (isPBZeroOn())
+		{
+			printf("\r\nPB zero is on ");
+		}
+		if (isPBOneOn())
+		{
+			printf("\r\n PB one is on");
+		}
+
+		if (isPBTwoOn())
+		{
+			printf("\r\n PB two is on");
+		}
+		
+		if (isPBThreeOn())
+		{
+			printf("\r\n PB three is on");
+		}
+		if (!SS)
+		{
+			printf("\r\n slide switch is on");
+		}
+		*/
+
+
+
     }
 }
 
@@ -96,7 +131,7 @@ void Port_Init(void)
 {
     P2MDOUT &= ~0x1F;
     P2 |= 0x1F;
-    P3MDOUT |= 0xFB;
+    P3MDOUT |= 0xFA;
     P1MDIN &= ~0x02;
     P1MDOUT &= ~0x02;
     P1 |= 0x02;
@@ -125,10 +160,14 @@ unsigned char read_AD_input(unsigned char n)
  */
 unsigned char random(void) {
     unsigned int rand_var = rand() % 8;
+	
     while (last == rand_var) {
         rand_var = rand() % 8;
     }
+	//printf("\r\nlast is %d",last);
+	//printf("\r\nrandom var is%d",rand_var);
     last = rand_var;
+
     return rand_var;
 }
 
@@ -153,15 +192,16 @@ void Timer_Init(void)
 }
 
 unsigned char determine_wait_time(unsigned char ADResult){
-	float slope = 3.97;
-    return (int)( slope * ADResult + 125 );
+	float slope = .564;
+    return (int)( slope * ADResult + 16 );
 }
 
 /*
  * convert the decimal input to 3-bit and lit leds accordingly
  */
 void random_to_LED(unsigned char rand){
-    unsigned int bits[3] = {0,0,0};// stores the 3 bits of the led
+    
+	/*unsigned int bits[3] = {0,0,0};// stores the 3 bits of the led
     unsigned int loc = 3;
 
     while (1){
@@ -174,13 +214,62 @@ void random_to_LED(unsigned char rand){
     //lit leds by looping thru the bits array
 	for (i = 0; i < 3; i ++){
 		if (i == 0 && bits[i] == 1 ){
-            LED0 = 0;
-        } else if (i == 1 && bits[i] == 1){
-            LED1 = 0;
-        } else if (i == 2 && bits[i] == 1){
+			printf("\r\n LED0 is on");
             LED2 = 0;
+        } 
+		if (i == 1 && bits[i] == 1){
+			printf("\r\n LED1 is on");
+            LED1 = 0;
+        } 
+		if (i == 2 && bits[i] == 1){
+			printf("\r\n LED2 is on");
+            LED0 = 0;
         }
 	}
+	*/
+	if (rand ==1)
+	{
+		LED0 = 0;
+		LED1 =1; 
+		LED2 = 1;
+	}
+	else if (rand == 2)
+	{
+		LED1 = 0;
+		LED0 = 1;
+		LED2 = 1;
+	}
+	else if (rand == 3)
+	{
+		LED1 = 0;
+		LED0 = 0;
+		LED2 = 1;
+	}
+	else if (rand == 4)
+	{
+		LED2 = 0;
+		LED0 = 1;
+		LED1 = 1;
+	}
+	else if (rand == 5)
+	{
+		LED2 = 0;
+		LED0 = 0;
+		LED1 = 1;
+	}
+	else if (rand == 6)
+	{
+		LED2 = 0;
+		LED1 = 0;
+		LED0 = 1;
+	}
+	else if (rand == 7)
+	{
+		LED1 = 0;
+		LED0 = 0;
+		LED2 = 0;
+	}
+	
 }
 
 unsigned int convert_to_decimal(){
@@ -188,29 +277,41 @@ unsigned int convert_to_decimal(){
     if (LED0 == 0) bits[0] = 1;
     if (LED1 == 0) bits[1] = 1;
     if (LED2 == 0) bits[2] = 1;
-    return 4 * bits[0] + 2 * bits[1] + 1 * bits[2];
+    return 1 * bits[0] + 2 * bits[1] + 4 * bits[2];
 }
 
 void wait_n_seconds(float n){
     Counts = 0;
-    while (Counts < n * 225);
+    while (Counts < n * 32);
 }
 
 void debounce(void){
+	//printf("\r\ndebounce before wait");
     debounce_counter = 0;
-    while(debounce_counter < 4); // wait for about 15ms to debounce
+    
+	while(debounce_counter < 4); // wait for about 15ms to debounce
+	
+	//printf("\r\ndebounce after wait");
 }
 
 void mode1(){
+	BUZZER = 1; // turn on buzzer
+    wait_n_seconds(0.5);
+    BUZZER = 0;
     total_scores = 0;
-    printf("\r\n   Mode1: Convert the binary number indicated by 3 LEDS to decimal and enter it thru keyboard ASAP");
+    printf("\r\n   Mode1: Convert the binary number indicated by 3 LEDS to decimal and enter it thru keyboard ASAP\r\n");
     turn_off_LEDs();
     loop_count = 0;
     while (loop_count < 8) {
         unsigned char rand_num = random();//generate a number between 0 and 7
-        random_to_LED(rand_num); // lit leds according to random number
+        //printf("\r\nrand num inside mode 1 is %d",rand_num);
+		printf("\r\n");
+		random_to_LED(rand_num); // lit leds according to random number
         time_elapsed = Counts;
+
         input = getchar();
+		input = input - 48; // this convers the char to a decomal
+		printf("\r\n%c",input);
         time_elapsed = Counts - time_elapsed; // get the time elasped between displaying LED and pressing
         if (input == rand_num){ // biled green
             BILED1 = 0;
@@ -219,24 +320,29 @@ void mode1(){
             BILED1 = 1;
             BILED2 = 0;
         }
-
+		//printf("input is %d, random  is %d",input,rand_num);
         if (time_elapsed > wait_time){
             scores = 0;
-        } else {
+
+        } else if ((int)input == rand_num) {
+			printf(" input == rand_num");
             scores = 10 - (10 * time_elapsed)/wait_time;
             total_scores += scores;
-        }
+        } else {
+			scores = 0;
+		}
         printf("\r\nTry score is %d and total score is %d",scores,total_scores);
-        wait_n_seconds(0.5); //delay 0.5s
+        printf("\r\n");
+		wait_n_seconds(0.5); //delay 0.5s
         BILED1 = 1;
         BILED2 = 1; // turn off biled
         loop_count ++;
     }
     turn_off_LEDs();
     printf("\r\nThe final score is %d",total_scores);
-    BUZZER = 0; // turn on buzzer
+    BUZZER = 1; // turn on buzzer
     wait_n_seconds(0.5);
-    BUZZER = 1;
+    BUZZER = 0;
 
 }
 
@@ -245,20 +351,20 @@ void mode2(){
     printf("\r\n Mode2: Convert the hex number shown in terminal to binary and enter it thru 3 pushbuttons ASAP");
     turn_off_LEDs();
     loop_count = 0;
-    BUZZER = 0; // Turn on buzzer for .5 s
+    BUZZER = 1; // Turn on buzzer for .5 s
     wait_n_seconds(0.5);
-    BUZZER = 1;
+    BUZZER = 0;
     while (loop_count < 8) {
         unsigned char rand_num = random();//generate a number between 0 and 7
-        printf("The random hexadecimal is 0x%d",rand_num); //display hex num
+        printf("\r\nThe random hexadecimal is 0x0%d",rand_num); //display hex num
         Counts = 0;
         while (Counts < wait_time){
             debounce();
-            if(isPBOneOn()) {
+            if(isPBZeroOn()) {
                 LED0 = !LED0;
-            } else if (isPBTwoOn()){
+            } else if (isPBOneOn()){
                 LED1 = !LED1;
-            } else if (isPBThreeOn()){
+            } else if (isPBTwoOn()){
                 LED2 = !LED2;
             }
             debounce();
@@ -282,9 +388,9 @@ void mode2(){
     }
     turn_off_LEDs();
     printf("\r\nThe final score is %d",total_scores);
-    BUZZER = 0; // turn on buzzer
+    BUZZER = 1; // turn on buzzer
     wait_n_seconds(0.5);
-    BUZZER = 1;
+    BUZZER = 0;
 }
 
 int isPBZeroOn(void) {
@@ -312,5 +418,4 @@ void turn_off_LEDs(void){
     LED0 = 1;
     LED1 = 1;
     LED2 = 1;
-    LED3 = 1;
 }
