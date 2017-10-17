@@ -85,11 +85,8 @@ void main() {
                        "\r\n   Mode2: Convert the hex number shown in terminal to binary and enter it thru 3 pushbuttons ASAP"
                        "\r\n Push the enter pushbutton to start");
         debounce();
-		//printf("\r\nafter first debounce");
         while(!isPBThreeOn()); // wait until the first pushbutton is pressed
-        //printf("\r\nafter while not pb three on");
 		debounce();
-		//printf("\r\nafter second debounce");
         wait_time = determine_wait_time(read_AD_input(1)); // get the A/D value, then convert it to wait time
         printf("\r\n %d is wait time",wait_time);
 		if (!SS){
@@ -97,33 +94,6 @@ void main() {
         } else {
             mode2();
         }
-		/*
-		if (isPBZeroOn())
-		{
-			printf("\r\nPB zero is on ");
-		}
-		if (isPBOneOn())
-		{
-			printf("\r\n PB one is on");
-		}
-
-		if (isPBTwoOn())
-		{
-			printf("\r\n PB two is on");
-		}
-		
-		if (isPBThreeOn())
-		{
-			printf("\r\n PB three is on");
-		}
-		if (!SS)
-		{
-			printf("\r\n slide switch is on");
-		}
-		*/
-
-
-
     }
 }
 
@@ -164,8 +134,6 @@ unsigned char random(void) {
     while (last == rand_var) {
         rand_var = rand() % 8;
     }
-	//printf("\r\nlast is %d",last);
-	//printf("\r\nrandom var is%d",rand_var);
     last = rand_var;
 
     return rand_var;
@@ -200,33 +168,6 @@ unsigned char determine_wait_time(unsigned char ADResult){
  * convert the decimal input to 3-bit and lit leds accordingly
  */
 void random_to_LED(unsigned char rand){
-    
-	/*unsigned int bits[3] = {0,0,0};// stores the 3 bits of the led
-    unsigned int loc = 3;
-
-    while (1){
-        unsigned int remainder = rand % 2;
-        rand = rand / 2; // integer division: remainder discarded
-        if (rand == 0) break; // stops conversion when the rand is 0
-        loc -- ;
-        bits[loc] = remainder;
-    }
-    //lit leds by looping thru the bits array
-	for (i = 0; i < 3; i ++){
-		if (i == 0 && bits[i] == 1 ){
-			printf("\r\n LED0 is on");
-            LED2 = 0;
-        } 
-		if (i == 1 && bits[i] == 1){
-			printf("\r\n LED1 is on");
-            LED1 = 0;
-        } 
-		if (i == 2 && bits[i] == 1){
-			printf("\r\n LED2 is on");
-            LED0 = 0;
-        }
-	}
-	*/
 	if (rand ==1)
 	{
 		LED0 = 0;
@@ -269,7 +210,6 @@ void random_to_LED(unsigned char rand){
 		LED0 = 0;
 		LED2 = 0;
 	}
-	
 }
 
 unsigned int convert_to_decimal(){
@@ -286,12 +226,10 @@ void wait_n_seconds(float n){
 }
 
 void debounce(void){
-	//printf("\r\ndebounce before wait");
     debounce_counter = 0;
     
 	while(debounce_counter < 4); // wait for about 15ms to debounce
-	
-	//printf("\r\ndebounce after wait");
+
 }
 
 void mode1(){
@@ -304,7 +242,6 @@ void mode1(){
     loop_count = 0;
     while (loop_count < 8) {
         unsigned char rand_num = random();//generate a number between 0 and 7
-        //printf("\r\nrand num inside mode 1 is %d",rand_num);
 		printf("\r\n");
 		random_to_LED(rand_num); // lit leds according to random number
         time_elapsed = Counts;
@@ -320,7 +257,6 @@ void mode1(){
             BILED1 = 1;
             BILED2 = 0;
         }
-		//printf("input is %d, random  is %d",input,rand_num);
         if (time_elapsed > wait_time){
             scores = 0;
 
