@@ -1,0 +1,25 @@
+compiler directives
+...
+declare global variables
+...
+function prototypes
+	void Port_Init(void);  
+	int sensor1(void);     
+	int sensor2(void);     
+	void Set_outputs(void);
+main function
+	declare local variables
+	initialization functions
+	begin infinite loop - while (TRUE)
+		read sensors
+		set outputs for LED, buzzer and BILED
+	end while
+end main function
+
+functions
+
+function initialize ports()
+	set ports 2 and 3 for input/output
+
+function set outputs()
+	determine LED, buzzer and BILED states based on the four conditions
