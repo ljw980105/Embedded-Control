@@ -1,4 +1,4 @@
-/* Sample code for Lab 3.1. This code provides a basic start. */
+/* Lab3.1 - PWM Acceleration*/
 #include <c8051_SDCC.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,15 +30,15 @@ void main(void)
 {
     // initialize board
     Sys_Init();
-    putchar(' '); //the quotes in this line may not format correctly
+    putchar(' ');
     Port_Init();
     XBR0_Init();
     PCA_Init();
 
     //print beginning message
-    printf("Embedded Control Pulsewidth Calibration\n");
-    PW = PW_CENTER;
-    counter_PCA = 0;
+    printf("Embedded Control Pulsewidth Calibration\r\n");
+    PW = PW_CENTER;  // set pw to 1.5ms
+    counter_PCA = 0; //reset counter 
     while(counter_PCA < 50);//wait for 1s
 
     while(1)
@@ -53,8 +53,7 @@ void main(void)
 //
 void Port_Init()
 {
-    //0000 1010
-    P1MDOUT |= 0x0A;  //set output pin for CEX0 or CEX2 in push-pull mode
+    P1MDOUT = 0x0D;  //set output pin for CEX0, CEX2 and CEX3 in push-pull mode
 }
 
 //-----------------------------------------------------------------------------
@@ -78,8 +77,8 @@ void XBR0_Init()
 void PCA_Init(void)
 {
     PCA0MD =0x81; //enable cf interrupt & SYSCLK/12
-    PCA0CPM2 = 0xC2; //Enable CCM2 16bit
-    PCA0CN |= 0x80; //Enable PCA Counter
+    PCA0CPM0 = PCA0CPM2 = 0xC2; //Enable CCM2 16bit
+    PCA0CN = 0x40; //Enable PCA Counter
     EA = 1; // Enable Global Interrupt
     EIE1 |= 0x08; // Enable PCA Interrupt
 
@@ -97,7 +96,7 @@ void PCA_ISR ( void ) __interrupt 9
 // implemented using the PCA (Programmable Counter Array), p. 50 in Lab Manual.
     counter_PCA++;
     if (CF){
-        CF = 0;
+        CF = 0; // clear overflow flag
         PCA0 = PCA_START; // 20ms period
     }
     PCA0CN &= 0x40;// handle other pca interrupt resources
@@ -110,17 +109,22 @@ void Set_Pulsewidth()
     input = getchar();
     if(input == '+')  // single character input to increase the pulsewidth
     {
-        PW += 100;
-        if(PW > PW_MAX)  // check if greater than pulsewidth maximum
-            PW = PW_MIN;    // set SERVO_PW to a minimum value
+        if(PW < PW_MAX){  // check if less than pulsewidth maximum  
+			PW += 10;
+		} else {
+			PW = PW_MIN; // set SERVO_PW to a minimum value
+		}
     }
     else if(input == '-')  // single character input to decrease the pulsewidth
     {
-        PW -= 100;
-        if(PW < PW_MIN)  // check if less than pulsewidth minimum
-            PW = PW_MAX;     // set PW to a maximum value
+        if(PW > PW_MIN){  // check if more than pulsewidth minimum 
+		   PW -= 10;
+		} else {
+			PW = PW_MAX; // set PW to a maximum value
+		}
     }
-    printf("PW: %u\n", PW);
-    PCA0CP1 = 0xFFFF - PW;
+    printf("PW: %u\r\n", PW);
+    PCA0CPL2 = 0xFFFF - PW;
+	PCA0CPH2 = (0xFFFF - PW) >> 8;
 
 }
