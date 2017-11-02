@@ -31,7 +31,7 @@ unsigned int ranger_distance;
 unsigned char Data[2];
 
 __sbit __at 0xDF CF;
-__sbit __at 0xB6 SWITCH;
+__sbit __at 0xB6 SS;
 
 
 //-----------------------------------------------------------------------------
@@ -72,20 +72,24 @@ void main(void)
 
 void Set_Pulsewidth()
 {
-    if (ranger_distance <= 10){ // full forward
-        PW = PW_MAX;
-    }
-    if (ranger_distance >= 40 && ranger_distance <= 50){//neutral
+    if(SS){ // if slide switch is off
         PW = PW_CENTER;
-    }
-    if (ranger_distance >= 90){ // full reverse
-        PW = PW_MIN;
-    }
-    if (ranger_distance > 10 && ranger_distance < 40){//linear between max forward and neutral
-        PW = -1 * 24.63 * ranger_distance + 3754;
-    }
-    if (ranger_distance > 50 && ranger_distance < 90){ //linear between max reverse and neutral
-        PW = -1 * 18.45 * ranger_distance + 3692;
+    } else { // if slide switch is on
+        if (ranger_distance <= 10){ // full forward
+            PW = PW_MAX;
+        }
+        if (ranger_distance >= 40 && ranger_distance <= 50){//neutral
+            PW = PW_CENTER;
+        }
+        if (ranger_distance >= 90){ // full reverse
+            PW = PW_MIN;
+        }
+        if (ranger_distance > 10 && ranger_distance < 40){//linear between max forward and neutral
+            PW = -1 * 24.63 * ranger_distance + 3754;
+        }
+        if (ranger_distance > 50 && ranger_distance < 90){ //linear between max reverse and neutral
+            PW = -1 * 18.45 * ranger_distance + 3692;
+        }
     }
     PreventExtreme(); // ensures that the PW is within the required range
     PCA0CPL2 = 0xFFFF - PW;
