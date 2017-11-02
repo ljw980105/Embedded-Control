@@ -13,20 +13,25 @@ void Set_Pulsewidth(void);
 void SMB_Init(void);
 void PCA_ISR ( void ) __interrupt 9;
 unsigned int ReadRanger();
+void PreventExtreme(void);
 
 //-----------------------------------------------------------------------------
 // Global Variables
 //-----------------------------------------------------------------------------
+unsigned int PW;
 unsigned int PCA_START = 28614; //65535-36921
-unsigned int counter_PCA = 0;																																																																																																																																																																																																																																																																																																				
+unsigned int PW_CENTER = 2769; // PulseWidth is about 1.5ms 2769
+unsigned int PW_MIN = 2031; // 1.1ms full reverse
+unsigned int PW_MAX = 3508; // 1.9ms full forward
+unsigned int counter_PCA = 0;
 unsigned int new_range = 0; // flag to determine whether a new range is ready to be read
 unsigned int r_count = 0;
 unsigned char addr = 0xE0; // the address of the ranger is 0xE0
 unsigned int ranger_distance;
 unsigned char Data[2];
 
-
 __sbit __at 0xDF CF;
+__sbit __at 0xB6 SWITCH;
 
 
 //-----------------------------------------------------------------------------
@@ -45,18 +50,57 @@ void main(void)
     XBR0_Init();
     PCA_Init();
     SMB_Init();
+
+    printf("Embedded Control Pulsewidth Calibration\r\n");
+    PW = PW_CENTER;  // set pw to 1.5ms
+    counter_PCA = 0; //reset counter
+    while(counter_PCA < 50);//wait for 1s
+
     while (1){
         if (new_range){ //if 80ms has passed
             ranger_distance = ReadRanger(); // read the range
             //start a ping
-			
             Data[0] = 0x51; // write 0x51 to reg 0 of the ranger:
             i2c_write_data(addr, 0, Data, 1); // write one byte of data to reg 0 at addr
             new_range = 0; //clear new range flag
-            printf("The current range is %d cm \r\n",ranger_distance);
         }
+        // Continuous loop control using ranger
+        Set_Pulsewidth();
+		printf("The current range is %d cm and PulswWidth is %d \r\n",ranger_distance,PW);
     }
 }
+
+void Set_Pulsewidth()
+{
+    if (ranger_distance <= 10){ // full forward
+        PW = PW_MAX;
+    }
+    if (ranger_distance >= 40 && ranger_distance <= 50){//neutral
+        PW = PW_CENTER;
+    }
+    if (ranger_distance >= 90){ // full reverse
+        PW = PW_MIN;
+    }
+    if (ranger_distance > 10 && ranger_distance < 40){//linear between max forward and neutral
+        PW = -1 * 24.63 * ranger_distance + 3754;
+    }
+    if (ranger_distance > 50 && ranger_distance < 90){ //linear between max reverse and neutral
+        PW = -1 * 18.45 * ranger_distance + 3692;
+    }
+    PreventExtreme(); // ensures that the PW is within the required range
+    PCA0CPL2 = 0xFFFF - PW;
+    PCA0CPH2 = (0xFFFF - PW) >> 8;
+}
+
+void PreventExtreme(){
+    if (PW > PW_MAX){
+        PW = PW_MIN;
+    }
+    if (PW < PW_MIN){
+        PW = PW_MAX;
+    }
+}
+
 
 //
 // Port-Init Set up ports for input and output
@@ -64,6 +108,8 @@ void main(void)
 void Port_Init()
 {
     P1MDOUT = 0x0D;  //set output pin for CEX0, CEX2 and CEX3 in push-pull mode
+    P3MDOUT &= ~0x70; // Set 3.6 and 3.7 to input 
+    P3 |= 0x70; // Set 3.6 and 3.7 to high impedance 
 }
 
 //-----------------------------------------------------------------------------
@@ -104,7 +150,6 @@ void SMB_Init(void){
     ENSMB = 1; // enable SMBus
 }
 
-
 //
 // Interrupt Service Routine for Programmable Counter Array Overflow Interrupt
 //
@@ -121,5 +166,5 @@ void PCA_ISR ( void ) __interrupt 9 {
             r_count = 0;
         }
     }
-        PCA0CN &= 0x40;// handle other pca interrupt resources
+    PCA0CN &= 0x40;// handle other pca interrupt resources
 }
