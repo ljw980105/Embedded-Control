@@ -1,4 +1,4 @@
-/* Lab3.2 - Ranger Distance*/
+/* Lab3.3 - Speed Controller Using Ranger*/
 #include <c8051_SDCC.h>
 #include <i2c.h>
 #include <stdio.h>
@@ -31,7 +31,7 @@ unsigned int ranger_distance;
 unsigned char Data[2];
 
 __sbit __at 0xDF CF;
-__sbit __at 0xB6 SS;
+__sbit __at 0xB6 RANGER_SS;
 
 
 //-----------------------------------------------------------------------------
@@ -63,16 +63,16 @@ void main(void)
             Data[0] = 0x51; // write 0x51 to reg 0 of the ranger:
             i2c_write_data(addr, 0, Data, 1); // write one byte of data to reg 0 at addr
             new_range = 0; //clear new range flag
+
+			// Continuous loop control using ranger
+        	Set_Pulsewidth();
         }
-        // Continuous loop control using ranger
-        Set_Pulsewidth();
-		printf("The current range is %d cm and PulswWidth is %d \r\n",ranger_distance,PW);
     }
 }
 
 void Set_Pulsewidth()
 {
-    if(SS){ // if slide switch is off
+    if(RANGER_SS){ // if slide switch is off
         PW = PW_CENTER;
     } else { // if slide switch is on
         if (ranger_distance <= 10){ // full forward
@@ -94,6 +94,9 @@ void Set_Pulsewidth()
     PreventExtreme(); // ensures that the PW is within the required range
     PCA0CPL2 = 0xFFFF - PW;
     PCA0CPH2 = (0xFFFF - PW) >> 8;
+
+	printf("The current range is %d cm\r\n",ranger_distance);
+    printf("The current pulse width is %d\r\n",PW);
 }
 
 void PreventExtreme(){
