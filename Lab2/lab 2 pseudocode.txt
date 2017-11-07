@@ -1,0 +1,278 @@
+
+compiler directives
+
+Function prototypes
+    void Timer_Init(void);     // Initialize Timer 0 
+    void Interrupt_Init(void); //Initialize interrupts
+    void ADC_Init(void);
+    void Port_Init(void);
+    void Timer0_ISR(void) __interrupt interrupt_service_routine;
+    unsigned char read_AD_input(unsigned char n);
+    Unsigned int determine_wait_time(unsigned int ADResult);
+    void Timer0_ISR(void) __interrupt 1;
+    Void mode1(void);
+    Void mode2(void);
+    Unsigned int random(void);
+    int isPBZeroOn(void);// function that checks PushButton 0
+    int isPBOneOn(void);//function that checks PushButton 1
+    int isPBTwoOn(void);// function that checks PushButton 2
+    int isPBThreeOn(void);//function that checks PushButton 3
+    void turn_off_LEDs(void);
+    Void random_to_LED(unsigned char rand)
+    Void wait_n_seconds(float n);
+    Void debounce(void);
+    Unsigned int convert_to_decimal();
+
+
+declare global variables
+   Integer Counts, debounce_counter, scores, total_scores, wait_time, time_elapsed,  
+           loopcount, i,
+   Character input,last 
+
+
+
+Port Initializations via SBIT variables
+
+
+Main function
+    Initialization functions
+    
+    begin infinite loop - while (TRUE)
+        Turn off LEDs, BILEDs and Buzzer
+        Display instructions for user 
+        Wait for debounce
+        Wait for PBZero to be pressed
+		Wait for debounce
+        Perform A/D conversion on value from potentiometer
+        Calculate the wait_time from this potentiometer value
+        Read slide switch and run the corresponding mode
+
+        If Slideswitch is on
+            Run mode 1
+        Else 
+            Run mode 2
+    End while loop
+End Main function
+
+
+
+
+
+Functions
+
+Function initialize ports
+      Set ports 1, 2 and 3 for inputs/outputs
+
+Void ADCInit(void)
+      Set vref to internal reference voltage
+      Enable a/d converter
+      Set a/d converter gain to 1
+
+unsigned char read_AD_input(unsigned char n)
+      Set p1.0 as analog input of adc1
+      Clear the conversion completed flag
+      Start A/D Conversion
+      Wait for conversion to finish
+      Return digital value to adc register
+	  
+	  
+Function random()
+    Generate a random number
+    While random number generated is the same as the last one generated
+           Generate new number
+    Return random number generated
+	
+Function interrupt initialization
+      Enable interrupts in general
+      Enable interrupts for timer 0
+
+
+      
+Function timer 0 interrupt service routine
+      One is added to counts
+      One is added to debouce_counter
+
+Function Timer Initialization
+    make timer zero use sysclk/12, 13 bit, stop it and clear HI and  LO bytes	  
+	  
+	  
+	  
+	  
+	  
+Unsigned char determine_wait_time(unsigned int ADResult)
+    Convert adc result to number of overflows to wait for
+    Return wait time
+	
+
+Void random_to_LED(unsigned char rand)
+    If rand is 1
+        Light led0
+		Turn off LED1 and LED2
+    Else if rand is 2
+        Light led 1
+		Turn off LED0 and LED1
+    Else if rand is 3
+        Light led 1
+		light led 0
+		Turn off LED2
+    Else if rand is 4
+        Light led 2
+		Turn off LED0 and LED1
+    Else if rand is 5
+        Light led 2
+        Light led0
+		Turn off LED1
+    Else if rand is 6
+        Light led1
+        Light led2
+		Turn off LED0
+    Else if rad is 7
+        Light led 0
+        Light led1
+        Light led2
+
+
+Unsigned int convert_to_decimal(void)
+    Created an int array of length 3 filled with 0s
+    If led0 is on
+        Set the 1st locations of array to 1
+    If led1 is on
+        Set the 2nd locations of array to 1
+    If led2 is on
+        Set the 3rd locations of array to 1
+    Return 4 times value at location 0 of array plus 2 times value at location 1 of array plus 1 times value at location 2 of array
+
+Void wait n seconds(float n)
+    Reset overflow counter
+    While overflow counts is less than n times 32
+
+Void debounce(void)
+    Reset debounce counter
+    While debounce counter is less than 4
+
+
+
+
+
+Void mode1(void)
+    turn on buzzer
+	wait .5 seconds
+	turn off buzzer
+    Reset total score
+    Print instructions
+    Turn off all leds
+    Reset loop_count
+    While loop count is less than 8
+        Get the random number
+        Light Leds according to random number
+        Set time elapsed equal to overflow count
+        Get keyboard input
+        Set time elapsed equal to the difference of counts and time elapsed
+        If input equals to random number then
+            Set biled to green
+        Else
+            Set Biled to red
+
+        If time_elapsed is greater than wait time
+            Set scores to 0
+        Else if input equals random number
+		    Set scores to 10 -(10*time elapsed)/wait time
+            Add scores to total scores
+		Else
+            scores equals zero
+        Print scores and total scores
+        Wait 0.5s
+        Turn off biled
+        Increment loop count
+    End While Loop
+    Turn off all leds
+    Print final scores
+    Sound buzzer for 0.5s
+    
+
+
+
+Void mode2(void)
+    Reset total scores
+    Print instructions
+    Turn off all leds
+    Reset loop count
+    Sound buzzer for 0.5s
+    While loop count is less than 8
+        Get the random number
+        Print the random hexadecimal to terminal
+        Reset overflow counter (counts)
+        While counts is less than wait time
+            Wait for debounce
+            If PB1 is On
+                Invert LED0 Status
+            Else if PB2 is On
+                Invert LED1 status
+            Else if PB3 is ON
+                Invert LED2 status
+            Wait for debounce
+        End While Loop
+        If the calculated binary from LEDs is equal to the random number
+            Light biled green
+            Set scores to 10
+            Increment total scores by 10
+        Else
+            Light biled red
+            Set scores to 0
+        Print scores and total scores
+        Wait 0.5s
+        Turn off biled
+        Increment loop count
+    End While Loop
+    Turn off all LEds
+    Print final scores
+    Sound buzzer for 0.5s
+
+
+Function is PBZero on
+       If push button 0 is on
+            Return 1
+       Else
+            Return 0
+   
+Function is PBOne on
+       If push button 1 is on
+            Return 1
+       Else
+            Return 0
+
+Function is PBTwo on
+       If push button 2 is on
+            Return 1
+       Else
+            Return 0
+
+Function is PBThree on
+       If push button 3 is on
+            Return 1
+       Else
+            Return 0
+
+Void turn off leds(void)
+    Turn off BILED
+    Turn off LED0-3
+    
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+
+
