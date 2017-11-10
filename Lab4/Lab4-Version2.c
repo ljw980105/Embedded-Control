@@ -75,7 +75,7 @@ void main(void)
     while(counter_PCA < 50);//wait for 1s
 
     // read the gains
-    Kp = read_AD_input(4) / 25 ;  // TODO: verify the ports, (pin 1.4 - 1.7)
+    Kp = read_AD_input(7) / 25 ;  // TODO: verify the ports, (pin 1.4 - 1.7)
     printf_fast_f("The ADC Conversion Result is %f\r\n", Kp);
     stops = 0;
     adjust_gain();
@@ -192,6 +192,7 @@ void preselectHeading(){
         }
         switch (input){
             case 1:
+				desired_heading = 0;
                 break;
             case 2:
                 desired_heading = 900;
@@ -322,7 +323,7 @@ void turn_right(){
 }
 
 //adjust the servo direction by adjusting the current heading to match the desired heading
-void adjsutServo(){
+void adjustServo(){
     error = desired_heading - heading; // set error
     if (new_heading) { // 40 ms passed
         heading = ReadCompass(); // set heading to heading reported by electronic compass
@@ -381,6 +382,11 @@ void Port_Init()
     P1MDOUT |= 0x0D;  //set output pin for CEX0 or CEX2 in push-pull mode
     P3MDOUT &= ~0x70;
     P3 |= 0x70;
+
+	//set up ADC conversion on Pin1.7
+	P1MDIN &= ~0x80;
+	P1MDOUT &= ~0x80;
+	P1 |= 0x08;
 }
 
 //-----------------------------------------------------------------------------
@@ -485,6 +491,11 @@ void PreventExtreme(){
     if (PW_Servo < PW_MIN){
         PW_Servo = PW_MIN;
     }
+}
+
+void SMB_Init(void){
+    SMB0CR = 0x93; // set scl to 100khz
+    ENSMB = 1; // enable SMBus
 }
 
 void ADC_Init(void)
