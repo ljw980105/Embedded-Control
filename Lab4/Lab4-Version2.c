@@ -219,7 +219,6 @@ void preselectHeading(){
                 while(i < 4){
                     printf("enter the digit %d \r\n", i);
                     input = getchar();
-                    input -= 48; // convert from ascii to numerical value
                     inputArr[i] = input;
                     i ++;
                 }
@@ -277,7 +276,6 @@ void preselectMotorSpd(){
                 while(i < 4){
                     printf("enter the digit %d \r\n", i);
                     input = getchar();
-                    input -= 48; // convert from ascii to numerical value
                     inputArr[i] = input;
                     i ++;
                 }
@@ -379,9 +377,9 @@ unsigned int Update_Value(int Constant, unsigned char incr, int maxval, int minv
 //
 void Port_Init()
 {
-    P1MDOUT |= 0x0D;  //set output pin for CEX0 or CEX2 in push-pull mode
-    P3MDOUT &= ~0x70;
-    P3 |= 0x70;
+    P1MDOUT |= 0x0D;  //set output pin for CEX0, CEX2 and CEX3 in push-pull mode
+    P3MDOUT &= ~0x80; //Set Slideswitch at P3.7 for input
+    P3 |= 0x80;
 
 	//set up ADC conversion on Pin1.7
 	P1MDIN &= ~0x80;
@@ -409,7 +407,7 @@ void XBR0_Init()
 void PCA_Init(void)
 {
     PCA0MD = 0x81;
-    PCA0CPM0 = 0xC2;
+    PCA0CPM2 = PCA0CPM0 = 0xC2;
     EIE1 |= 0x08;
     PCA0CN = 0x40;
     EA = 1;
@@ -443,10 +441,9 @@ void PCA_ISR ( void ) __interrupt 9 {
             PCA0 = PCA_START;
     }
     PCA0CN &= 0xC0;
-    }
+}
 
 unsigned int ReadCompass(){
-
     i2c_read_data(addr_compass,2,CompassData,2);   //adress, byte to start, where to story, how many bytes to read
     heading = ((CompassData[0] << 8) | CompassData[1]); // turn 2 8-bit into one 16 bit
     return heading;
