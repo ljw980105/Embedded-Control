@@ -20,8 +20,8 @@ void preselectHeading(void);
 void preselectMotorSpd(void);
 void turn_left(void);
 void turn_right(void);
-void ajdustServo(void);
-int Update_Value(int Constant, unsigned char incr, int maxval, int minval, int mode);
+void adjustServo(void);
+unsigned int Update_Value(int Constant, unsigned char incr, int maxval, int minval, int mode);
 void start_driving(void);
 void adjust_gain(void);
 void update_ranger(void);
@@ -37,15 +37,13 @@ unsigned char print_flag = 0;
 unsigned char heading_count = 0;
 unsigned char ranger_count = 0;
 unsigned char LCD_count = 0;
-unsigned int print_count = 0;
-unsigned int disable_regular_stops0 = 0;
-unsigned int desired_heading, toadj, heading,multipleInput, i, stops, ranger_distance;
-unsigned int inputArr[4];
+//unsigned int print_count = 0;
+// using __xdata to store large variables
+unsigned int __xdata desired_heading, toadj, heading,multipleInput, i, stops, ranger_distance;
 signed int error;
 int Kp_temp;
 float Kp;
 unsigned int counter_PCA = 0;
-unsigned int center_pw = 2740;
 unsigned int PW_Servo, PW_Motor;
 unsigned int PCA_START = 28614; //65535-36921
 unsigned int PW_CENTER = 2769; // PulseWidth is about 1.5ms 2769
@@ -53,13 +51,13 @@ unsigned int PW_MIN = 2031; // 1.1ms full reverse
 unsigned int PW_MAX = 3508; // 1.9ms full forward
 unsigned char addr_ranger = 0xE0; // address of ranger
 unsigned char addr_compass = 0xC0; // address of compass
+unsigned char motor_spd;
 
 __sbit __at 0xB7 SS; // slideswitch to enable/ disable servo and motor at P3.7
 
 //-----------------------------------------------------------------------------
 // Main Function
 //-----------------------------------------------------------------------------
-//////////
 void main(void)
 {
     // initialize board
@@ -78,6 +76,7 @@ void main(void)
 
     // read the gains
     Kp = read_AD_input(4) / 25 ;  // TODO: verify the ports, (pin 1.4 - 1.7)
+    printf_fast_f("The ADC Conversion Result is %f\r\n", Kp);
     stops = 0;
     adjust_gain();
     //read the heading and motor speed from secureCRT or keypad
@@ -88,46 +87,57 @@ void main(void)
 
     while(1) {
         if (!SS) { // if SS is on
-            if ((stops == 0 && ranger_distance < 50) || disable_regular_stops0){
+            if (stops == 0 && ranger_distance < 40){
                 // stop the car
-                disable_regular_stops0 = 1;
                 PW_Motor = PW_CENTER;
                 start_driving(); // sets the proper pulsewidth for the motor
                 //turn according to keyboard input
-                input = getchar();
-                if (input == 'L' || input == 'l'){
-                    turn_left();
-                } else if  (input == 'R' || input == 'r'){
-                    turn_right();
-                } else if (input == ' '){
-                    // resume driving
+                input = getchar_nw(); // returns 0xFF is no key is pressed
+                if (input != 0xFF){ // pressing a valid key
+                    if (input == 'L' || input == 'l'){
+                        turn_left();
+                    } else if  (input == 'R' || input == 'r'){
+                        turn_right();
+                    } else if (input == ' '){ // resume driving
+                        PW_Motor = motor_spd;
+                        start_driving(); // sets the proper pulsewidth for the motor
+                    }
                 }
-
-                disable_regular_stops0 = 0;
+                stops ++;
+            } else if (stops == 1 && ranger_distance < 40) {
+                // stop the car
+                PW_Motor = PW_CENTER;
+                start_driving();
+                break;
             } else {
-                adjsutServo();
+                adjustServo();
                 start_driving();
                 update_ranger();
             }
-
-
-
-
-
-
+            PreventExtreme();
         } else { //SS is not on
-            PW_Servo = center_pw; // Set Servo to neutral
+            PW_Servo = PW_CENTER; // Set Servo to neutral
             PCA0CPL0 = 0xFFFF - PW_Servo;
             PCA0CPH0 = (0xFFFF - PW_Servo) >> 8;
             PW_Motor = PW_CENTER; // set motor to neutral
             PCA0CPL2 = 0xFFFF - PW_Motor;
             PCA0CPH2 = (0xFFFF - PW_Motor) >> 8;
+            PreventExtreme();
+        }
+        // print ranger distance and compass heading
+        printf("The current compass heading is %d\r\n", heading);
+        printf("The current ranger distance is %d cm \r\n", ranger_distance);
+        if (print_flag){ // update LCD
+            lcd_print("The current compass heading is %d\r\n", heading);
+            lcd_print("The current ranger distance is %d cm \r\n", ranger_distance);
+            print_flag = 0;
         }
     }
 }
 
+
 void adjust_gain(){
-    Kp_temp = int (Kp);
+    Kp_temp = Kp;
     printf("Enter 1 to adjust servo gain, enter 2 to use existing gain");
     input = getchar();
 
@@ -144,6 +154,7 @@ void adjust_gain(){
     }
 }
 
+
 void start_driving(){
     PCA0CPL2 = 0xFFFF - PW_Motor;
     PCA0CPH2 = (0xFFFF - PW_Motor) >> 8;
@@ -153,8 +164,8 @@ void update_ranger(){
     if (new_range){ //if 80ms has passed
         ranger_distance = ReadRanger(); // read the range
         //start a ping
-        Data[0] = 0x51; // write 0x51 to reg 0 of the ranger:
-        i2c_write_data(addr, 0, Data, 1); // write one byte of data to reg 0 at addr
+        RangerData[0] = 0x51; // write 0x51 to reg 0 of the ranger:
+        i2c_write_data(addr_ranger, 0, RangerData, 1); // write one byte of data to reg 0 at addr
         new_range = 0; //clear new range flag
         printf("The current range is %d cm \r\n",ranger_distance);
     }
@@ -164,7 +175,7 @@ void update_ranger(){
  * Select from a predefined list of heading or select manually
  */
 void preselectHeading(){
-    inputArr = {0,0,0,0};
+    unsigned int __xdata inputArr[4] = {0,0,0,0}; // using __xdata to store large variables
     i = 0;
     printf("Enter 1 to select from the list of headings, or enter 2 to select manually\r\n");
     input = getchar();
@@ -220,7 +231,7 @@ void preselectHeading(){
 }
 
 void preselectMotorSpd(){
-    inputArr = {0,0,0,0};
+    unsigned int __xdata inputArr[4] = {0,0,0,0}; // using __xdata to store large variables
     i = 0;
     printf("Enter 1 to select from the list of motor speeds, or enter 2 to select manually\r\n");
     input = getchar();
@@ -251,6 +262,7 @@ void preselectMotorSpd(){
             default:
                 break;
         }
+        motor_spd = PW_Motor;
     } else if (input == 2){
         printf("Enter 1 to enter the heading using the Keypad, or enter 2 to enter using keyboard\r\n");
         input = getchar();
@@ -273,29 +285,40 @@ void preselectMotorSpd(){
             default:
                 break;
         }
+        motor_spd = PW_Motor;
     }
 }
 
 
+
 //execute a hard left
 void turn_left(){
-//    desired_heading = 900; // hard left
-//    heading = ReadCompass();
-//    error = desired_heading - heading;
-//    while (h)
     if (new_heading){
         heading = ReadCompass(); // read the current heading
         new_heading = 0;
     }
     desired_heading = heading - 900;
-
-
-
+    while(heading > desired_heading){
+//      error = desired_heading - heading; // set error
+        adjustServo(); // turn the wheels left
+        PW_Motor = motor_spd;
+        start_driving();
+    }
 }
 
 //execute a hard right
 void turn_right(){
-
+    if (new_heading){
+        heading = ReadCompass(); // read the current heading
+        new_heading = 0;
+    }
+    desired_heading = heading + 900;
+    while(heading < desired_heading){
+//      error = desired_heading - heading; // set error
+        adjustServo(); // turn the wheels left
+        PW_Motor = motor_spd;
+        start_driving();
+    }
 }
 
 //adjust the servo direction by adjusting the current heading to match the desired heading
@@ -303,24 +326,27 @@ void adjsutServo(){
     error = desired_heading - heading; // set error
     if (new_heading) { // 40 ms passed
         heading = ReadCompass(); // set heading to heading reported by electronic compass
+		/*
         if (print_count > 5) { // only print out every 5th reading
             printf("\r\n heading is %d",heading);
             printf("\r\n desired heading is %d",desired_heading);
             print_count = 0; // reset print counter
             printf("\r\n Error is %d",error);
             printf(" \r\n current PW: %u\n\r", PW_Servo);
-            toadj = Kp*(error) + center_pw;
+            toadj = Kp*(error) + PW_CENTER;
             printf("\r\n the pulse width is now being adjusted to %d",toadj);
         }
-        print_count++; // incriment print count
+        print_count++; // increment print count
+		*/
         adjust_pw(); // run adj pw function
         new_heading = 0;
     }
 }
 
-int Update_Value(int Constant, unsigned char incr, int maxval, int minval, int mode) {
-    int deflt;
-    char input;
+
+unsigned int Update_Value(int Constant, unsigned char incr, int maxval, int minval, int mode) {
+    int deflt = Kp;
+    char input = 0;
     while(1) {
         if (mode == 1) input = getchar();
         if (mode == 2){
@@ -341,6 +367,7 @@ int Update_Value(int Constant, unsigned char incr, int maxval, int minval, int m
         if (input == 'u') return Constant;
     }
 }
+
 
 
 //-----------------------------------------------------------------------------
@@ -389,28 +416,28 @@ void PCA_Init(void)
 // Interrupt Service Routine for Programmable Counter Array Overflow Interrupt
 //
 void PCA_ISR ( void ) __interrupt 9 {
-counter_PCA++;
-if (CF){
-CF = 0;// reset flag
-heading_count++;
-LCD_count ++ ;
-ranger_count ++;
-if(heading_count >= 2){ // approx 40 ms
-new_heading = 1; // flag new heading can be read
-heading_count = 0; // reset pca count timer
-}
-if (ranger_count >= 4){
-new_range = 1;//flag new range can be read
-ranger_count = 0;
-}
-if (LCD_count >= 25){
-print_flag = 1;
-LCD_count = 0;
-}
-PCA0 = PCA_START;
-}
-PCA0CN &= 0xC0;
-}
+    counter_PCA++;
+    if (CF){
+        CF = 0;// reset flag
+        heading_count++;
+        LCD_count ++ ;
+        ranger_count ++;
+        if(heading_count >= 2){ // approx 40 ms
+            new_heading = 1; // flag new heading can be read
+            heading_count = 0; // reset pca count timer
+        }
+        if (ranger_count >= 4){
+            new_range = 1;//flag new range can be read
+            ranger_count = 0;
+        }
+        if (LCD_count >= 25){
+            print_flag = 1;
+            LCD_count = 0;
+        }
+            PCA0 = PCA_START;
+    }
+    PCA0CN &= 0xC0;
+    }
 
 unsigned int ReadCompass(){
 
@@ -430,7 +457,7 @@ void adjust_pw() {
         error = error + 3600;
     }
 
-    PW_Servo = Kp*(error) + center_pw; // set new PW
+    PW_Servo = Kp*(error) + PW_CENTER; // set new PW
     PCA0CPL0 = 0xFFFF - PW_Servo;
     PCA0CPH0 = (0xFFFF - PW_Servo) >> 8;
 }
@@ -452,6 +479,12 @@ void PreventExtreme(){
     if (PW_Motor < PW_MIN){
         PW_Motor = PW_MIN;
     }
+    if (PW_Servo > PW_MAX){
+        PW_Servo = PW_MAX;
+    }
+    if (PW_Servo < PW_MIN){
+        PW_Servo = PW_MIN;
+    }
 }
 
 void ADC_Init(void)
@@ -460,7 +493,6 @@ void ADC_Init(void)
     ADC1CN = 0x80; /* Enable A/D converter (ADC1) */
     ADC1CF |= 0x01; /* Set A/D converter gain to 1 */
 }
-
 
 unsigned char read_AD_input(unsigned char n)
 {
