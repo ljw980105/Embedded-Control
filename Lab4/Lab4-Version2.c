@@ -88,6 +88,7 @@ void main(void)
     while(1) {
         if (!SS) { // if SS is on
             if (stops == 0 && ranger_distance < 40){
+				printf("1st if block \r\n");
                 // stop the car
                 PW_Motor = PW_CENTER;
                 start_driving(); // sets the proper pulsewidth for the motor
@@ -104,18 +105,25 @@ void main(void)
                     }
                 }
                 stops ++;
-            } else if (stops == 1 && ranger_distance < 40) {
+            } else if (stops == 1 && ranger_distance < 40 {
+				//printf("2nd if block \r\n");
                 // stop the car
                 PW_Motor = PW_CENTER;
                 start_driving();
-                break;
+				//adjustServo();
+                //start_driving();
+                //update_ranger();
             } else {
+				//PreventExtreme();
+				//printf("The Motor PulseWidth is  %d\r\n", PW_Motor);
+				//printf("3rd if block \r\n");
                 adjustServo();
                 start_driving();
                 update_ranger();
             }
             PreventExtreme();
         } else { //SS is not on
+			printf("last if block \r\n");
             PW_Servo = PW_CENTER; // Set Servo to neutral
             PCA0CPL0 = 0xFFFF - PW_Servo;
             PCA0CPH0 = (0xFFFF - PW_Servo) >> 8;
@@ -125,11 +133,12 @@ void main(void)
             PreventExtreme();
         }
         // print ranger distance and compass heading
-        printf("The current compass heading is %d\r\n", heading);
-        printf("The current ranger distance is %d cm \r\n", ranger_distance);
+        printf("Heading: is %d\r\n", heading);
+        printf("Distance: %d cm \r\n", ranger_distance);
         if (print_flag){ // update LCD
-            lcd_print("The current compass heading is %d\r\n", heading);
-            lcd_print("The current ranger distance is %d cm \r\n", ranger_distance);
+			lcd_clear();
+            lcd_print("Heading: %d\r\n", heading);
+            lcd_print("Distance: %d cm \r\n", ranger_distance);
             print_flag = 0;
         }
     }
@@ -140,11 +149,14 @@ void adjust_gain(){
     Kp_temp = Kp;
     printf("Enter 1 to adjust servo gain, enter 2 to use existing gain");
     input = getchar();
+	input -= 48;
+	printf("\r\n");
 
     if (input == 1){
         printf("Enter 1 to adjust using keyboard, enter 2 to use keypad");
         printf( "'c' - default, 'i' - increment, 'd' - decrement, 'u' - update and return deflt = Constant;\r\n");
         input = getchar();
+		input -= 48;
         if (input == 1) {
             Kp_temp = Update_Value(Kp_temp, 10, 102, 0, 1);
         } else if (input == 2){
@@ -156,8 +168,7 @@ void adjust_gain(){
 
 
 void start_driving(){
-    PCA0CPL2 = 0xFFFF - PW_Motor;
-    PCA0CPH2 = (0xFFFF - PW_Motor) >> 8;
+    PCA0CP2 = 0xFFFF - PW_Motor;
 }
 
 void update_ranger(){
@@ -179,16 +190,23 @@ void preselectHeading(){
     i = 0;
     printf("Enter 1 to select from the list of headings, or enter 2 to select manually\r\n");
     input = getchar();
+	input -= 48;
+	printf("\r\n");
     if (input == 1){
         printf("Enter 1 to to select heading using the keyboard, or enter 2 to select from keypad\r\n" );
         input = getchar();
+		input -= 48;
+		printf("\r\n");
         if (input == 1){
             printf("Enter 1 for 0 deg, 2 for 90 deg, 3 for 180 deg, or 4 for 270 deg \r\n");
             input = getchar();
+			input -= 48;
+			printf("\r\n");
         } else if (input == 2){
             lcd_print("Enter 1 for 0 deg, 2 for 90 deg, 3 for 180 deg, or 4 for 270 deg \r\n");
             input = read_keypad();
             input -= 48;
+			printf("\r\n");
         }
         switch (input){
             case 1:
@@ -209,6 +227,8 @@ void preselectHeading(){
     } else if (input == 2){
         printf("Enter 1 to enter the heading using the Keypad, or enter 2 to enter using keyboard\r\n");
         input = getchar();
+		input -= 48;
+	    printf("\r\n");
         switch (input){
             case 1:
                 multipleInput = kpd_input(0);
@@ -219,6 +239,8 @@ void preselectHeading(){
                 while(i < 4){
                     printf("enter the digit %d \r\n", i);
                     input = getchar();
+					input -= 48;
+					printf("\r\n");
                     inputArr[i] = input;
                     i ++;
                 }
@@ -235,16 +257,23 @@ void preselectMotorSpd(){
     i = 0;
     printf("Enter 1 to select from the list of motor speeds, or enter 2 to select manually\r\n");
     input = getchar();
+	input -= 48;
+	printf("\r\n");
     if (input == 1){
         printf("Enter 1 to to select speed using the keyboard, or enter 2 to select from keypad\r\n");
         input = getchar();
+		input -= 48;
+		printf("\r\n");
         if (input == 1){
             printf("Enter 1 for full reverse , 2 for 1/2 full reverse ,3 for 1/2 full forward, or 4 for full forward \r\n");
             input = getchar();
+			input -= 48;
+			printf("\r\n");
         } else if (input == 2){
             lcd_print("Enter 1 for full reverse , 2 for 1/2 full reverse , 3 for 1/2 full forward, or 4 for full forward \r\n");
             input = read_keypad();
             input -= 48;
+			printf("\r\n");
         }
         switch (input){
             case 1:
@@ -266,6 +295,8 @@ void preselectMotorSpd(){
     } else if (input == 2){
         printf("Enter 1 to enter the heading using the Keypad, or enter 2 to enter using keyboard\r\n");
         input = getchar();
+		input -= 48;
+		printf("\r\n");
         switch (input){
             case 1:
                 multipleInput = kpd_input(0);
@@ -276,6 +307,8 @@ void preselectMotorSpd(){
                 while(i < 4){
                     printf("enter the digit %d \r\n", i);
                     input = getchar();
+					input -= 48;
+					printf("\r\n");
                     inputArr[i] = input;
                     i ++;
                 }
@@ -434,7 +467,7 @@ void PCA_ISR ( void ) __interrupt 9 {
             new_range = 1;//flag new range can be read
             ranger_count = 0;
         }
-        if (LCD_count >= 25){
+        if (LCD_count >= 50){
             print_flag = 1;
             LCD_count = 0;
         }
