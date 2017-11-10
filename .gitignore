@@ -42,6 +42,9 @@
 *.idb
 *.pdb
 
+# To Fix a Weird Bug
+cd ..
+
 # Kernel Module Compile Results
 *.mod*
 *.cmd
