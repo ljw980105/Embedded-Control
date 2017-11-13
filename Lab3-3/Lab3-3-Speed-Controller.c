@@ -31,7 +31,7 @@ unsigned int ranger_distance;
 unsigned char Data[2];
 
 __sbit __at 0xDF CF;
-__sbit __at 0xB6 RANGER_SS;
+__sbit __at 0xB7 RANGER_SS;
 
 
 //-----------------------------------------------------------------------------
@@ -53,6 +53,8 @@ void main(void)
 
     printf("Embedded Control Pulsewidth Calibration\r\n");
     PW = PW_CENTER;  // set pw to 1.5ms
+	PCA0CPL2 = 0xFFFF - PW;
+    PCA0CPH2 = (0xFFFF - PW) >> 8;
     counter_PCA = 0; //reset counter
     while(counter_PCA < 50);//wait for 1s
 
@@ -72,7 +74,7 @@ void main(void)
 
 void Set_Pulsewidth()
 {
-    if(RANGER_SS){ // if slide switch is off
+    if(!RANGER_SS){ // if slide switch is off
         PW = PW_CENTER;
     } else { // if slide switch is on
         if (ranger_distance <= 10){ // full forward
@@ -92,7 +94,8 @@ void Set_Pulsewidth()
         }
     }
     PreventExtreme(); // ensures that the PW is within the required range
-    PCA0CPL2 = 0xFFFF - PW;
+    PCA0CPL2 = 0xFFFF - PW;PCA0CPL2 = 0xFFFF - PW;
+    PCA0CPH2 = (0xFFFF - PW) >> 8;
     PCA0CPH2 = (0xFFFF - PW) >> 8;
 
 	printf("The current range is %d cm\r\n",ranger_distance);

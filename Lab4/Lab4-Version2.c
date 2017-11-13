@@ -25,6 +25,8 @@ unsigned int Update_Value(int Constant, unsigned char incr, int maxval, int minv
 void start_driving(void);
 void adjust_gain(void);
 void update_ranger(void);
+void updateMultiRanger(void);
+unsigned int rangerCompare(unsigned int limit);
 
 //-----------------------------------------------------------------------------
 // Global Variables
@@ -44,14 +46,14 @@ signed int error;
 int Kp_temp;
 float Kp;
 unsigned int counter_PCA = 0;
-unsigned int PW_Servo, PW_Motor;
+unsigned int PW_Servo, PW_Motor, motor_spd;
 unsigned int PCA_START = 28614; //65535-36921
 unsigned int PW_CENTER = 2769; // PulseWidth is about 1.5ms 2769
 unsigned int PW_MIN = 2031; // 1.1ms full reverse
 unsigned int PW_MAX = 3508; // 1.9ms full forward
 unsigned char addr_ranger = 0xE0; // address of ranger
 unsigned char addr_compass = 0xC0; // address of compass
-unsigned char motor_spd;
+unsigned int __xdata MultiRanger[5] = {0,0,0,0,0}; // implement a queue data structure
 
 __sbit __at 0xB7 SS; // slideswitch to enable/ disable servo and motor at P3.7
 
@@ -71,11 +73,14 @@ void main(void)
 
     printf("Embedded Control Pulsewidth Calibration\r\n");
     PW_Motor = PW_CENTER;  // set pw to 1.5ms
+    PW_Servo = PW_CENTER;
+    PCA0CP0 = 0xFFFF - PW_Motor;
+    PCA0CP2 = 0xFFFF - PW_Servo;
     counter_PCA = 0; //reset counter
     while(counter_PCA < 50);//wait for 1s
 
     // read the gains
-    Kp = read_AD_input(7) / 25 ;  // TODO: verify the ports, (pin 1.4 - 1.7)
+    Kp = read_AD_input(7) / 25 ;  // read adc input at pin 1.7
     printf_fast_f("The ADC Conversion Result is %f\r\n", Kp);
     stops = 0;
     adjust_gain();
@@ -87,26 +92,33 @@ void main(void)
 
     while(1) {
         if (!SS) { // if SS is on
-            if (stops == 0 && ranger_distance < 40){
+            counter_PCA = 0;
+            while (counter_PCA < 5){
+                update_ranger();
+                MultiRanger[counter_PCA] = ranger_distance;
+            }
+		
+            if (stops == 0 && rangerCompare(5)){
 				printf("1st if block \r\n");
                 // stop the car
                 PW_Motor = PW_CENTER;
                 start_driving(); // sets the proper pulsewidth for the motor
                 //turn according to keyboard input
+                printf("Press L to turn left, R to turn right");
                 input = getchar_nw(); // returns 0xFF is no key is pressed
-                if (input != 0xFF){ // pressing a valid key
-                    if (input == 'L' || input == 'l'){
-                        turn_left();
-                    } else if  (input == 'R' || input == 'r'){
-                        turn_right();
-                    } else if (input == ' '){ // resume driving
-                        PW_Motor = motor_spd;
-                        start_driving(); // sets the proper pulsewidth for the motor
-                    }
+                while(input == 0xFF) input = getchar_nw(); // wait until pressing a valid key
+
+                if (input == 'L' || input == 'l'){
+                    turn_left();
+                } else if  (input == 'R' || input == 'r'){
+                    turn_right();
+                } else if (input == ' '){ // resume driving
+                    PW_Motor = motor_spd;
+                    start_driving(); // sets the proper pulsewidth for the motor
                 }
                 stops ++;
-            } else if (stops == 1 && ranger_distance < 40 {
-				//printf("2nd if block \r\n");
+            } else if (stops == 1 && rangerCompare(5)) {
+				printf("2nd if block \r\n");
                 // stop the car
                 PW_Motor = PW_CENTER;
                 start_driving();
@@ -115,11 +127,12 @@ void main(void)
                 //update_ranger();
             } else {
 				//PreventExtreme();
-				//printf("The Motor PulseWidth is  %d\r\n", PW_Motor);
-				//printf("3rd if block \r\n");
+				printf("3rd if block \r\n");
                 adjustServo();
                 start_driving();
                 update_ranger();
+                updateMultiRanger();
+
             }
             PreventExtreme();
         } else { //SS is not on
@@ -167,6 +180,28 @@ void adjust_gain(){
 }
 
 
+//implement a queue data structure: this array holds 5 of the latest range values
+void updateMultiRanger(){
+    MultiRanger[0] = MultiRanger[1];
+    MultiRanger[1] = MultiRanger[2];
+    MultiRanger[2] = MultiRanger[3];
+    MultiRanger[3] = MultiRanger[4];
+    MultiRanger[4] = ranger_distance;
+}
+
+/*
+ * All 5 values in the array have to be below the limit before the function returns true
+ * Prevents the problem where ranger values randomly spike to -1 from happening
+ */
+unsigned int rangerCompare(unsigned int limit){
+    i = 0;
+    for(i = 0; i < 5; i++){
+        if (MultiRanger[i] >= limit) return 0;
+    }
+    return 1;
+}
+
+
 void start_driving(){
     PCA0CP2 = 0xFFFF - PW_Motor;
 }
@@ -178,7 +213,7 @@ void update_ranger(){
         RangerData[0] = 0x51; // write 0x51 to reg 0 of the ranger:
         i2c_write_data(addr_ranger, 0, RangerData, 1); // write one byte of data to reg 0 at addr
         new_range = 0; //clear new range flag
-        printf("The current range is %d cm \r\n",ranger_distance);
+        //printf("The current range is %d cm \r\n",ranger_distance);
     }
 }
 
@@ -280,10 +315,10 @@ void preselectMotorSpd(){
                 PW_Motor = 2031;
                 break;
             case 2:
-                PW_Motor = 2400;
+                PW_Motor = 2200;
                 break;
             case 3:
-                PW_Motor = 3139;
+                PW_Motor = 3339;
                 break;
             case 4:
                 PW_Motor = 3508;
@@ -331,7 +366,6 @@ void turn_left(){
     }
     desired_heading = heading - 900;
     while(heading > desired_heading){
-//      error = desired_heading - heading; // set error
         adjustServo(); // turn the wheels left
         PW_Motor = motor_spd;
         start_driving();
@@ -346,7 +380,6 @@ void turn_right(){
     }
     desired_heading = heading + 900;
     while(heading < desired_heading){
-//      error = desired_heading - heading; // set error
         adjustServo(); // turn the wheels left
         PW_Motor = motor_spd;
         start_driving();
@@ -358,18 +391,7 @@ void adjustServo(){
     error = desired_heading - heading; // set error
     if (new_heading) { // 40 ms passed
         heading = ReadCompass(); // set heading to heading reported by electronic compass
-		/*
-        if (print_count > 5) { // only print out every 5th reading
-            printf("\r\n heading is %d",heading);
-            printf("\r\n desired heading is %d",desired_heading);
-            print_count = 0; // reset print counter
-            printf("\r\n Error is %d",error);
-            printf(" \r\n current PW: %u\n\r", PW_Servo);
-            toadj = Kp*(error) + PW_CENTER;
-            printf("\r\n the pulse width is now being adjusted to %d",toadj);
-        }
-        print_count++; // increment print count
-		*/
+		//printf("The desired heading is %d",desired_heading);
         adjust_pw(); // run adj pw function
         new_heading = 0;
     }
@@ -492,7 +514,6 @@ void adjust_pw() {
     {
         error = error + 3600;
     }
-
     PW_Servo = Kp*(error) + PW_CENTER; // set new PW
     PCA0CPL0 = 0xFFFF - PW_Servo;
     PCA0CPH0 = (0xFFFF - PW_Servo) >> 8;
