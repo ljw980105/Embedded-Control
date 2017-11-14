@@ -41,7 +41,7 @@ unsigned char ranger_count = 0;
 unsigned char LCD_count = 0;
 //unsigned int print_count = 0;
 // using __xdata to store large variables
-unsigned int __xdata desired_heading, toadj, heading,multipleInput, i, stops, ranger_distance;
+unsigned int __xdata desired_heading, heading,multipleInput, i, stops, ranger_distance;
 signed int error;
 int Kp_temp;
 float Kp;
@@ -53,7 +53,7 @@ unsigned int PW_MIN = 2031; // 1.1ms full reverse
 unsigned int PW_MAX = 3508; // 1.9ms full forward
 unsigned char addr_ranger = 0xE0; // address of ranger
 unsigned char addr_compass = 0xC0; // address of compass
-unsigned int __xdata RangerArray[5] = {0,0,0,0,0}; // implement a queue data structure
+unsigned int __xdata RangerArray[2] = {0,0}; // implement a queue data structure
 
 __sbit __at 0xB7 SS; // slideswitch to enable/ disable servo and motor at P3.7
 
@@ -98,7 +98,7 @@ void main(void)
                 RangerArray[counter_PCA] = ranger_distance;
             }
 
-            if (stops == 0 && rangerCompare(5)){
+            if (stops == 0 && rangerCompare(50)){
 				printf("1st if block \r\n");
                 // stop the car
                 PW_Motor = PW_CENTER;
@@ -117,7 +117,7 @@ void main(void)
                     start_driving(); // sets the proper pulsewidth for the motor
                 }
                 stops ++;
-            } else if (stops == 1 && rangerCompare(5)) {
+            } else if (stops == 1 && rangerCompare(50)) {
 				printf("2nd if block \r\n");
                 // stop the car
                 PW_Motor = PW_CENTER;
@@ -131,7 +131,6 @@ void main(void)
                 adjustServo();
                 start_driving();
                 update_ranger();
-                updateRangerArray();
 
             }
             PreventExtreme();
@@ -183,10 +182,10 @@ void adjust_gain(){
 //implement a queue data structure: this array holds 5 of the latest range values
 void updateRangerArray(){
     RangerArray[0] = RangerArray[1];
-    RangerArray[1] = RangerArray[2];
-    RangerArray[2] = RangerArray[3];
-    RangerArray[3] = RangerArray[4];
-    RangerArray[4] = ranger_distance;
+    RangerArray[1] = ranger_distance;
+    //RangerArray[2] = RangerArray[3];
+    //RangerArray[3] = RangerArray[4];
+    //RangerArray[4] = ranger_distance;
 }
 
 /*
@@ -195,7 +194,7 @@ void updateRangerArray(){
  */
 unsigned int rangerCompare(unsigned int limit){
     i = 0;
-    for(i = 0; i < 5; i++){
+    for(i = 0; i < 2; i++){
         if (RangerArray[i] >= limit) return 0;
     }
     return 1;
@@ -213,6 +212,7 @@ void update_ranger(){
         RangerData[0] = 0x51; // write 0x51 to reg 0 of the ranger:
         i2c_write_data(addr_ranger, 0, RangerData, 1); // write one byte of data to reg 0 at addr
         new_range = 0; //clear new range flag
+		updateRangerArray();
         //printf("The current range is %d cm \r\n",ranger_distance);
     }
 }
@@ -364,11 +364,12 @@ void turn_left(){
         heading = ReadCompass(); // read the current heading
         new_heading = 0;
     }
-    desired_heading = heading - 900;
+    desired_heading = heading - 800;
     while(heading > desired_heading){
         adjustServo(); // turn the wheels left
         PW_Motor = motor_spd;
         start_driving();
+		printf("The desired heading is %d\r\n", desired_heading);
     }
 }
 
