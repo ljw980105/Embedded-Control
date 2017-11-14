@@ -25,7 +25,7 @@ unsigned int Update_Value(int Constant, unsigned char incr, int maxval, int minv
 void start_driving(void);
 void adjust_gain(void);
 void update_ranger(void);
-void updateMultiRanger(void);
+void updateRangerArray(void);
 unsigned int rangerCompare(unsigned int limit);
 
 //-----------------------------------------------------------------------------
@@ -53,7 +53,7 @@ unsigned int PW_MIN = 2031; // 1.1ms full reverse
 unsigned int PW_MAX = 3508; // 1.9ms full forward
 unsigned char addr_ranger = 0xE0; // address of ranger
 unsigned char addr_compass = 0xC0; // address of compass
-unsigned int __xdata MultiRanger[5] = {0,0,0,0,0}; // implement a queue data structure
+unsigned int __xdata RangerArray[5] = {0,0,0,0,0}; // implement a queue data structure
 
 __sbit __at 0xB7 SS; // slideswitch to enable/ disable servo and motor at P3.7
 
@@ -95,9 +95,9 @@ void main(void)
             counter_PCA = 0;
             while (counter_PCA < 5){
                 update_ranger();
-                MultiRanger[counter_PCA] = ranger_distance;
+                RangerArray[counter_PCA] = ranger_distance;
             }
-		
+
             if (stops == 0 && rangerCompare(5)){
 				printf("1st if block \r\n");
                 // stop the car
@@ -131,7 +131,7 @@ void main(void)
                 adjustServo();
                 start_driving();
                 update_ranger();
-                updateMultiRanger();
+                updateRangerArray();
 
             }
             PreventExtreme();
@@ -181,12 +181,12 @@ void adjust_gain(){
 
 
 //implement a queue data structure: this array holds 5 of the latest range values
-void updateMultiRanger(){
-    MultiRanger[0] = MultiRanger[1];
-    MultiRanger[1] = MultiRanger[2];
-    MultiRanger[2] = MultiRanger[3];
-    MultiRanger[3] = MultiRanger[4];
-    MultiRanger[4] = ranger_distance;
+void updateRangerArray(){
+    RangerArray[0] = RangerArray[1];
+    RangerArray[1] = RangerArray[2];
+    RangerArray[2] = RangerArray[3];
+    RangerArray[3] = RangerArray[4];
+    RangerArray[4] = ranger_distance;
 }
 
 /*
@@ -196,7 +196,7 @@ void updateMultiRanger(){
 unsigned int rangerCompare(unsigned int limit){
     i = 0;
     for(i = 0; i < 5; i++){
-        if (MultiRanger[i] >= limit) return 0;
+        if (RangerArray[i] >= limit) return 0;
     }
     return 1;
 }
