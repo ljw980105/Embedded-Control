@@ -26,6 +26,8 @@ void start_driving(void);
 void adjust_gain(void);
 void update_ranger(void);
 void updateRangerArray(void);
+void updateRangerArray2(void);
+unsigned int rangerCompareGreater(unsigned int limit);
 unsigned int rangerCompare(unsigned int limit);
 
 //-----------------------------------------------------------------------------
@@ -54,6 +56,7 @@ unsigned int PW_MAX = 3508; // 1.9ms full forward
 unsigned char addr_ranger = 0xE0; // address of ranger
 unsigned char addr_compass = 0xC0; // address of compass
 unsigned int __xdata RangerArray[2] = {0,0}; // implement a queue data structure
+unsigned int __xdata RangerArray2[2] =  {0,0};
 
 __sbit __at 0xB7 SS; // slideswitch to enable/ disable servo and motor at P3.7
 
@@ -152,6 +155,7 @@ void main(void)
             lcd_print("Heading: %d\r\n", heading);
             lcd_print("Distance: %d cm \r\n", ranger_distance);
             print_flag = 0;
+			lcd_print("D Heading: %d\r\n",desired_heading);
         }
     }
 }
@@ -196,6 +200,19 @@ unsigned int rangerCompare(unsigned int limit){
     i = 0;
     for(i = 0; i < 2; i++){
         if (RangerArray[i] >= limit) return 0;
+    }
+    return 1;
+}
+
+void updateRangerArray2(void){
+	RangerArray2[0] = RangerArray2[1];
+    RangerArray2[1] = ranger_distance;
+}
+
+unsigned int rangerCompareGreater(unsigned int limit){
+	i = 0;
+    for(i = 0; i < 2; i++){
+        if (RangerArray2[i] < limit) return 0;
     }
     return 1;
 }
@@ -365,12 +382,23 @@ void turn_left(){
         new_heading = 0;
     }
     desired_heading = heading - 800;
-    while(heading > desired_heading){
+    while(1){
         adjustServo(); // turn the wheels left
         PW_Motor = motor_spd;
         start_driving();
-		printf("The desired heading is %d\r\n", desired_heading);
+		update_ranger();
+		if (rangerCompareGreater(30)) {
+			desired_heading = heading;
+			PW_Servo = PW_CENTER;
+			adjustServo();
+			break;
+		}
+		printf("xxxxxxxxxxxxxxxxxxThe desired heading is %d\r\n", desired_heading);
+		printf("xxxxxxxxxxxxxxxxxxThe heading is %d\r\n", heading);	
+		
     }
+	adjustServo();
+
 }
 
 //execute a hard right
@@ -384,6 +412,14 @@ void turn_right(){
         adjustServo(); // turn the wheels left
         PW_Motor = motor_spd;
         start_driving();
+		update_ranger();
+		//if (!rangerCompare(50)) {
+		//	desired_heading = heading;
+		//	adjustServo();
+		//	break;
+		//}
+		//adjustServo();
+
     }
 }
 
