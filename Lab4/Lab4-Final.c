@@ -55,7 +55,7 @@ unsigned char addr_ranger = 0xE0; // address of ranger
 unsigned char addr_compass = 0xC0; // address of compass
 unsigned int __xdata RangerArray[2] = {0,0}; // implement a queue data structure
 
-__sbit __at 0xB7 SS; // slideswitch to enable/ disable servo and motor at P3.7
+__sbit __at 0xB7 SS; // slide switch to enable/ disable servo and motor at P3.7
 
 //-----------------------------------------------------------------------------
 // Main Function
@@ -79,7 +79,7 @@ void main(void)
     counter_PCA = 0; //reset counter
     while(counter_PCA < 50);//wait for 1s
 
-    // read the gains
+    // read and ask the user to adjust the gains
     Kp = read_AD_input(7) / 25 ;  // read adc input at pin 1.7
     printf_fast_f("The ADC Conversion Result is %f\r\n", Kp);
     stops = 0;
@@ -89,7 +89,6 @@ void main(void)
     preselectMotorSpd();
     ranger_distance = 10000; // initialize at a large number for proper functionality
 
-
     while(1) {
         if (!SS) { // if SS is on
             counter_PCA = 0;
@@ -97,7 +96,7 @@ void main(void)
                 update_ranger();
                 RangerArray[counter_PCA] = ranger_distance;
             }
-
+            // encounters the 1st obstacle: turn left/right based on input
             if (stops == 0 && rangerCompare(50)){
 				printf("1st if block \r\n");
                 // stop the car
@@ -117,19 +116,19 @@ void main(void)
                     start_driving(); // sets the proper pulsewidth for the motor
                 }
                 stops ++;
+            // encounters the 2nd obstacle: stop the car
             } else if (stops == 1 && rangerCompare(50)) {
 				printf("2nd if block \r\n");
-                // stop the car
                 PW_Motor = PW_CENTER;
                 start_driving();
-            } else {
+            } else { // normal driving mode
 				printf("3rd if block \r\n");
                 adjustServo();
                 start_driving();
                 update_ranger();
             }
             PreventExtreme();
-        } else { //SS is not on
+        } else { //SS is not on: set everything to neutral
 			printf("last if block \r\n");
             PW_Servo = PW_CENTER; // Set Servo to neutral
             PCA0CPL0 = 0xFFFF - PW_Servo;
@@ -147,12 +146,14 @@ void main(void)
             lcd_print("Heading: %d\r\n", heading);
             lcd_print("Distance: %d cm \r\n", ranger_distance);
             print_flag = 0;
-			lcd_print("D Heading: %d\r\n",desired_heading);
+			//lcd_print("D Heading: %d\r\n",desired_heading);
         }
     }
 }
 
-
+/*
+ * Adjust gain function: use existing gain or use the provided Update_Value() to adjust gain
+ */
 void adjust_gain(){
     Kp_temp = Kp;
     printf("Enter 1 to adjust servo gain, enter 2 to use existing gain");
@@ -174,8 +175,9 @@ void adjust_gain(){
     }
 }
 
-
-//implement a queue data structure: this array holds 2 of the latest range values
+/*
+ * implement a queue data structure: this array holds 2 of the latest range values
+ */
 void updateRangerArray(){
     RangerArray[0] = RangerArray[1];
     RangerArray[1] = ranger_distance;
@@ -198,6 +200,9 @@ void start_driving(){
     PCA0CP2 = 0xFFFF - PW_Motor;
 }
 
+/*
+ * Read and update range values
+ */
 void update_ranger(){
     if (new_range){ //if 80ms has passed
         ranger_distance = ReadRanger(); // read the range
@@ -279,6 +284,9 @@ void preselectHeading(){
     }
 }
 
+/*
+ * Select from a predefined list of motor speed or select manually
+ */
 void preselectMotorSpd(){
     unsigned int __xdata inputArr[4] = {0,0,0,0}; // using __xdata to store large variables
     i = 0;
@@ -339,6 +347,7 @@ void preselectMotorSpd(){
                     inputArr[i] = input;
                     i ++;
                 }
+                //convert array to a 4 digit number
                 PW_Motor = inputArr[0] * 1000 + inputArr[1]* 100 + inputArr[2]*10 + inputArr[3];
                 break;
             default:
@@ -362,7 +371,8 @@ void turn_right(){
         start_driving();
     }
     desired_heading = heading;
-    if(rangerCompare(50)){
+	// keep calling the function recursively to perform a correct turn
+    if(rangerCompare(50)){ 
         turn_right();
     }
 }
@@ -381,12 +391,15 @@ void turn_left(){
 		start_driving();
 	}
 	desired_heading = heading;
+	// keep calling the function recursively to perform a correct turn
 	if(rangerCompare(50)){
 		turn_left();
 	}
 }
 
-//adjust the servo direction by adjusting the current heading to match the desired heading
+/*
+ * adjust the servo direction by adjusting the current heading to match the desired heading
+ */
 void adjustServo(){
     error = desired_heading - heading; // set error
     if (new_heading) { // 40 ms passed
@@ -396,7 +409,9 @@ void adjustServo(){
     }
 }
 
-
+/*
+ * Provided code from lab description. This code adjusts pulsewidth without having to recompile code.
+ */
 unsigned int Update_Value(int Constant, unsigned char incr, int maxval, int minval, int mode) {
     int deflt = Kp;
     char input = 0;
@@ -490,7 +505,7 @@ void PCA_ISR ( void ) __interrupt 9 {
             print_flag = 1;
             LCD_count = 0;
         }
-            PCA0 = PCA_START;
+        PCA0 = PCA_START;
     }
     PCA0CN &= 0xC0;
 }
@@ -503,12 +518,9 @@ unsigned int ReadCompass(){
 
 void adjust_pw() {
 
-    if (error > 1800) // if your error is too high, reset it low. this keeps moves efficient
-    {
+    if (error > 1800){ // if your error is too high, reset it low. this keeps moves efficient
         error = error - 3600;
-    }
-    else if (error < -1800) // if error is too high, reset low. this keeps moves efficient
-    {
+    } else if (error < -1800){ // if error is too high, reset low. this keeps moves efficient
         error = error + 3600;
     }
     PW_Servo = Kp*(error) + PW_CENTER; // set new PW
