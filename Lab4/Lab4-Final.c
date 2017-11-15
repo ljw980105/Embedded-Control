@@ -27,8 +27,6 @@ void start_driving(void);
 void adjust_gain(void);
 void update_ranger(void);
 void updateRangerArray(void);
-void updateRangerArray2(void);
-unsigned int rangerCompareGreater(unsigned int limit);
 unsigned int rangerCompare(unsigned int limit);
 
 //-----------------------------------------------------------------------------
@@ -42,7 +40,6 @@ unsigned char print_flag = 0;
 unsigned char heading_count = 0;
 unsigned char ranger_count = 0;
 unsigned char LCD_count = 0;
-//unsigned int print_count = 0;
 // using __xdata to store large variables
 unsigned int __xdata desired_heading, heading,multipleInput, i, stops, ranger_distance;
 signed int error;
@@ -57,7 +54,6 @@ unsigned int PW_MAX = 3508; // 1.9ms full forward
 unsigned char addr_ranger = 0xE0; // address of ranger
 unsigned char addr_compass = 0xC0; // address of compass
 unsigned int __xdata RangerArray[2] = {0,0}; // implement a queue data structure
-unsigned int __xdata RangerArray2[2] =  {0,0};
 
 __sbit __at 0xB7 SS; // slideswitch to enable/ disable servo and motor at P3.7
 
@@ -97,7 +93,7 @@ void main(void)
     while(1) {
         if (!SS) { // if SS is on
             counter_PCA = 0;
-            while (counter_PCA < 5){
+            while (counter_PCA < 5){ // fill 5 initial values of array
                 update_ranger();
                 RangerArray[counter_PCA] = ranger_distance;
             }
@@ -113,7 +109,7 @@ void main(void)
                 while(input == 0xFF) input = getchar_nw(); // wait until pressing a valid key
 
                 if (input == 'L' || input == 'l'){
-                    turn_left2();
+                    turn_left();
                 } else if  (input == 'R' || input == 'r'){
                     turn_right();
                 } else if (input == ' '){ // resume driving
@@ -126,16 +122,11 @@ void main(void)
                 // stop the car
                 PW_Motor = PW_CENTER;
                 start_driving();
-				//adjustServo();
-                //start_driving();
-                //update_ranger();
             } else {
-				//PreventExtreme();
 				printf("3rd if block \r\n");
                 adjustServo();
                 start_driving();
                 update_ranger();
-
             }
             PreventExtreme();
         } else { //SS is not on
@@ -184,17 +175,14 @@ void adjust_gain(){
 }
 
 
-//implement a queue data structure: this array holds 5 of the latest range values
+//implement a queue data structure: this array holds 2 of the latest range values
 void updateRangerArray(){
     RangerArray[0] = RangerArray[1];
     RangerArray[1] = ranger_distance;
-    //RangerArray[2] = RangerArray[3];
-    //RangerArray[3] = RangerArray[4];
-    //RangerArray[4] = ranger_distance;
 }
 
 /*
- * All 5 values in the array have to be below the limit before the function returns true
+ * All 2 values in the array have to be below the limit before the function returns true
  * Prevents the problem where ranger values randomly spike to -1 from happening
  */
 unsigned int rangerCompare(unsigned int limit){
@@ -205,20 +193,7 @@ unsigned int rangerCompare(unsigned int limit){
     return 1;
 }
 
-void updateRangerArray2(void){
-	RangerArray2[0] = RangerArray2[1];
-    RangerArray2[1] = ranger_distance;
-}
-
-unsigned int rangerCompareGreater(unsigned int limit){
-	i = 0;
-    for(i = 0; i < 2; i++){
-        if (RangerArray2[i] < limit) return 0;
-    }
-    return 1;
-}
-
-
+//sets proper pulsewidth
 void start_driving(){
     PCA0CP2 = 0xFFFF - PW_Motor;
 }
@@ -230,8 +205,7 @@ void update_ranger(){
         RangerData[0] = 0x51; // write 0x51 to reg 0 of the ranger:
         i2c_write_data(addr_ranger, 0, RangerData, 1); // write one byte of data to reg 0 at addr
         new_range = 0; //clear new range flag
-		updateRangerArray();
-        //printf("The current range is %d cm \r\n",ranger_distance);
+		updateRangerArray(); // append range data to the queue
     }
 }
 
@@ -374,34 +348,6 @@ void preselectMotorSpd(){
     }
 }
 
-
-
-//execute a hard left
-void turn_left(){
-    if (new_heading){
-        heading = ReadCompass(); // read the current heading
-        new_heading = 0;
-    }
-    desired_heading = heading - 800;
-    while(1){
-        adjustServo(); // turn the wheels left
-        PW_Motor = motor_spd;
-        start_driving();
-		update_ranger();
-		if (rangerCompareGreater(30)) {
-			desired_heading = heading;
-			PW_Servo = PW_CENTER;
-			adjustServo();
-			break;
-		}
-		printf("xxxxxxxxxxxxxxxxxxThe desired heading is %d\r\n", desired_heading);
-		printf("xxxxxxxxxxxxxxxxxxThe heading is %d\r\n", heading);	
-		
-    }
-	adjustServo();
-
-}
-
 //execute a hard right
 void turn_right(){
     if (new_heading){
@@ -409,22 +355,20 @@ void turn_right(){
         new_heading = 0;
     }
     desired_heading = heading + 900;
-    while(heading < desired_heading){
-        adjustServo(); // turn the wheels left
+    while(rangerCompare(50)){
+        update_ranger();
+        adjustServo();
         PW_Motor = motor_spd;
         start_driving();
-		update_ranger();
-		//if (!rangerCompare(50)) {
-		//	desired_heading = heading;
-		//	adjustServo();
-		//	break;
-		//}
-		//adjustServo();
-
+    }
+    desired_heading = heading;
+    if(rangerCompare(50)){
+        turn_right();
     }
 }
 
-void turn_left2(){
+//execute a hard left
+void turn_left(){
 	if (new_heading){
         heading = ReadCompass(); // read the current heading
         new_heading = 0;
@@ -435,13 +379,11 @@ void turn_left2(){
 		adjustServo();
 		PW_Motor = motor_spd;
 		start_driving();
-		printf("Turn lEft 2 is being called\r\n");
 	}
 	desired_heading = heading;
 	if(rangerCompare(50)){
-		turn_left2();
+		turn_left();
 	}
-
 }
 
 //adjust the servo direction by adjusting the current heading to match the desired heading
@@ -449,7 +391,6 @@ void adjustServo(){
     error = desired_heading - heading; // set error
     if (new_heading) { // 40 ms passed
         heading = ReadCompass(); // set heading to heading reported by electronic compass
-		//printf("The desired heading is %d",desired_heading);
         adjust_pw(); // run adj pw function
         new_heading = 0;
     }
@@ -479,8 +420,6 @@ unsigned int Update_Value(int Constant, unsigned char incr, int maxval, int minv
         if (input == 'u') return Constant;
     }
 }
-
-
 
 //-----------------------------------------------------------------------------
 // Port_Init
