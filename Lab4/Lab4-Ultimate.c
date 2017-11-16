@@ -149,11 +149,8 @@ void main(void)
         printf("Distance: %d cm \r\n", ranger_distance);
         if (print_flag){ // update LCD
 			lcd_clear();
-//            lcd_print("Heading: %d\r\n", heading);
-//            lcd_print("Distance: %d cm \r\n", ranger_distance);
             lcd_print("direction: %u\nrange: %u\npw perc: %u\nbattery: %u\n",heading,ranger_distance,pw_percentage,read_AD_input(6));
             print_flag = 0;
-			//lcd_print("D Heading: %d\r\n",desired_heading);
         }
     }
 }
@@ -373,17 +370,15 @@ void turn_right(){
         new_heading = 0;
     }
     desired_heading = heading + 900;
-    while(rangerCompare(50)){
+    motor_spd -= 200; // decrease motor speed for accurate turning
+    while (getchar_nw() != ' '){
         update_ranger();
         adjustServo();
         PW_Motor = motor_spd;
         start_driving();
     }
-    desired_heading = heading;
-	// keep calling the function recursively to perform a correct turn
-    if(rangerCompare(50)){ 
-        turn_right();
-    }
+    motor_spd += 200; // set motor speed back to normal
+    desired_heading = initial_heading;
 }
 
 //execute a hard left
@@ -393,26 +388,14 @@ void turn_left(){
         new_heading = 0;
     }
     desired_heading = heading - 800;
-	motor_spd -= 200;
-//	while(rangerCompare(50)){
-//	    update_ranger();
-//		adjustServo();
-//		PW_Motor = motor_spd;
-//		start_driving();
-//	}
-//
-//	// keep calling the function recursively to perform a correct turn
-//	if(rangerCompare(50)){
-//		turn_left();
-//	}
-//	desired_heading = heading;
+	motor_spd -= 200; // decrease motor speed for accurate turning
     while (getchar_nw() != ' '){
         update_ranger();
 		adjustServo();
 		PW_Motor = motor_spd;
 		start_driving();
     }
-	motor_spd += 200;
+	motor_spd += 200; // set motor speed back to normal
 	desired_heading = initial_heading;
 }
 
