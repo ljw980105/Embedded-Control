@@ -378,6 +378,7 @@ void turn_right(){
         adjustServo();
         PW_Motor = motor_spd;
         start_driving();
+        pw_percentage = (abs(PW_Motor- PW_CENTER)*100)/(PW_MAX- PW_MIN);
 		if (print_flag){ // update LCD
 			printf("%u %u %u\r\n",heading, ranger_distance, PW_Servo);
 			lcd_clear();
@@ -405,6 +406,7 @@ void turn_left(){
 		adjustServo();
 		PW_Motor = motor_spd;
 		start_driving();
+        pw_percentage = (abs(PW_Motor- PW_CENTER)*100)/(PW_MAX- PW_MIN);
 		if (print_flag){ // update LCD
 			printf("%u %u %u\r\n",heading, ranger_distance, PW_Servo);
 			lcd_clear();
