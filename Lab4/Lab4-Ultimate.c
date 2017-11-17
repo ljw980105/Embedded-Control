@@ -32,7 +32,7 @@ unsigned int rangerCompare(unsigned int limit);
 //-----------------------------------------------------------------------------
 // Global Variables
 //-----------------------------------------------------------------------------
-unsigned char __xdata input, pw_percentage;
+unsigned char __xdata input, pw_percentage; // using __xdata to store large variables
 unsigned char CompassData[2], RangerData[2];
 unsigned char new_heading = 0;
 unsigned char new_range = 0;
@@ -40,7 +40,6 @@ unsigned char print_flag = 0;
 unsigned char heading_count = 0;
 unsigned char ranger_count = 0;
 unsigned char LCD_count = 0;
-// using __xdata to store large variables
 unsigned int __xdata desired_heading, heading,multipleInput, i, stops, ranger_distance,initial_heading;
 signed int error;
 int Kp_temp;
@@ -78,7 +77,7 @@ void main(void)
     PCA0CP0 = 0xFFFF - PW_Motor;
     PCA0CP2 = 0xFFFF - PW_Servo;
     counter_PCA = 0; //reset counter
-    while(counter_PCA < 50);//wait for 1s
+    while(counter_PCA < 50);//wait for 1s for correct setup
 
     // read and ask the user to adjust the gains
     Kp = read_AD_input(7) / 25 ;  // read adc input at pin 1.7
@@ -142,8 +141,6 @@ void main(void)
         }
         // print ranger distance and compass heading
         pw_percentage = (abs(PW_Motor- PW_CENTER)*100)/(PW_MAX- PW_MIN);
-        //printf("Heading: is %d\r\n", heading);
-        //printf("Distance: %d cm \r\n", ranger_distance);
         if (print_flag){ // update LCD
 			printf("%u %u %u\r\n",heading, ranger_distance, PW_Servo);
 			lcd_clear();
@@ -163,17 +160,17 @@ void adjust_gain(){
 	input -= 48;
 	printf("\r\n");
 
-    if (input == 1){// this blocked is skipped if
+    if (input == 1){// this blocked is skipped if input is 2
         printf("Enter 1 to adjust using keyboard, enter 2 to use keypad");
         printf( "'c' - default, 'i' - increment, 'd' - decrement, 'u' - update and return deflt = Constant;\r\n");
         input = getchar();
 		input -= 48;
-        if (input == 1) {
+        if (input == 1) { // select an integer value between 10 - 102 (specified in lab description)
             Kp_temp = Update_Value(Kp_temp, 10, 102, 0, 1);
         } else if (input == 2){
-            Kp_temp = Update_Value(Kp_temp, 10, 102, 0, 0);
+            Kp_temp = Update_Value(Kp_temp, 10, 102, 0, 2);
         }
-        Kp = Kp_temp / 10;
+        Kp = Kp_temp / 10; // return a value within accepted range
     }
 }
 
@@ -197,7 +194,9 @@ unsigned int rangerCompare(unsigned int limit){
     return 1;
 }
 
-//sets proper pulsewidth
+/*
+ * sets proper pulsewidth for the motor
+ */
 void start_driving(){
     PCA0CP2 = 0xFFFF - PW_Motor;
 }
@@ -220,13 +219,14 @@ void update_ranger(){
  * Select from a predefined list of heading or select manually
  */
 void preselectHeading(){
+    //create an array that represents the 4 bits of heading
     unsigned int __xdata inputArr[4] = {0,0,0,0}; // using __xdata to store large variables
     i = 0;
     printf("Enter 1 to select from the list of headings, or enter 2 to select manually\r\n");
     input = getchar();
 	input -= 48;
 	printf("\r\n");
-    if (input == 1){
+    if (input == 1){ // select from list
         printf("Enter 1 to to select heading using the keyboard, or enter 2 to select from keypad\r\n" );
         input = getchar();
 		input -= 48;
@@ -242,24 +242,24 @@ void preselectHeading(){
             input -= 48;
 			printf("\r\n");
         }
-        switch (input){
+        switch (input){ // select input based on input values
             case 1:
-				desired_heading = 0;
+				desired_heading = 0; //0 deg
                 break;
             case 2:
-                desired_heading = 900;
+                desired_heading = 900; // 90 deg
                 break;
             case 3:
-                desired_heading = 1800;
+                desired_heading = 1800; // 180 deg
                 break;
             case 4:
-                desired_heading = 2700;
+                desired_heading = 2700; // 270 deg
                 break;
             default:
                 break;
         }
 		initial_heading = desired_heading;
-    } else if (input == 2){
+    } else if (input == 2){ // select manually
         printf("Enter 1 to enter the heading using the Keypad, or enter 2 to enter using keyboard\r\n");
         input = getchar();
 		input -= 48;
@@ -279,6 +279,7 @@ void preselectHeading(){
                     inputArr[i] = input;
                     i ++;
                 }
+                // convert to a 4 digit number
                 desired_heading = inputArr[0] * 1000 + inputArr[1]* 100 + inputArr[2]*10 + inputArr[3];
                 break;
             default:
@@ -298,40 +299,40 @@ void preselectMotorSpd(){
     input = getchar();
 	input -= 48;
 	printf("\r\n");
-    if (input == 1){
+    if (input == 1){ // select from list
         printf("Enter 1 to to select speed using the keyboard, or enter 2 to select from keypad\r\n");
         input = getchar();
 		input -= 48;
 		printf("\r\n");
         if (input == 1){
-            printf("Enter 1 for full reverse , 2 for 1/2 full reverse ,3 for 1/2 full forward, or 4 for full forward \r\n");
+            printf("Enter 1 for full reverse , 2 for 2/3 full reverse ,3 for 78% full forward, or 4 for full forward \r\n");
             input = getchar();
 			input -= 48;
 			printf("\r\n");
         } else if (input == 2){
-            lcd_print("Enter 1 for full reverse , 2 for 1/2 full reverse , 3 for 1/2 full forward, or 4 for full forward \r\n");
-            input = read_keypad();
+            lcd_print("Enter 1 for full reverse , 2 for 2/3 full reverse , 3 for 78% full forward, or 4 for full forward \r\n");
+            input = read_keypad(); // obtain input using keypad
             input -= 48;
 			printf("\r\n");
         }
         switch (input){
             case 1:
-                PW_Motor = 2031;
+                PW_Motor = 2031; // full reverse
                 break;
             case 2:
-                PW_Motor = 2300;
+                PW_Motor = 2300; // 2/3 full reverse
                 break;
             case 3:
-                PW_Motor = 3339;
+                PW_Motor = 3339; // 78% full forward
                 break;
             case 4:
-                PW_Motor = 3508;
+                PW_Motor = 3508; // full forward
                 break;
             default:
                 break;
         }
         motor_spd = PW_Motor;
-    } else if (input == 2){
+    } else if (input == 2){ // select manually
         printf("Enter 1 to enter the heading using the Keypad, or enter 2 to enter using keyboard\r\n");
         input = getchar();
 		input -= 48;
@@ -339,7 +340,7 @@ void preselectMotorSpd(){
         switch (input){
             case 1:
                 multipleInput = kpd_input(0);
-                PW_Motor = multipleInput;
+                PW_Motor = multipleInput;// obtain input using keypad
                 break;
             case 2:
                 // enter the 4 digits of heading digit by digit
@@ -361,15 +362,18 @@ void preselectMotorSpd(){
     }
 }
 
-//execute a hard right
+/*
+ * execute a hard right
+ */
 void turn_right(){
     if (new_heading){
         heading = ReadCompass(); // read the current heading
         new_heading = 0;
     }
+    // set the desired heading to 90 deg higher than the current heading (right turn)
     desired_heading = heading + 900;
     motor_spd -= 200; // decrease motor speed for accurate turning
-    while (getchar_nw() != ' '){
+    while (getchar_nw() != ' '){ // keep turning until space bar is pressed
         update_ranger();
         adjustServo();
         PW_Motor = motor_spd;
@@ -385,15 +389,18 @@ void turn_right(){
     desired_heading = initial_heading;
 }
 
-//execute a hard left
+/*
+ * execute a hard left
+ */
 void turn_left(){
 	if (new_heading){
         heading = ReadCompass(); // read the current heading
         new_heading = 0;
     }
+    // set the desired heading to 80 deg less than the current heading (leftturn)
     desired_heading = heading - 800;
 	motor_spd -= 200; // decrease motor speed for accurate turning
-    while (getchar_nw() != ' '){
+    while (getchar_nw() != ' '){ // keep turning until space bar is pressed
         update_ranger();
 		adjustServo();
 		PW_Motor = motor_spd;
@@ -422,17 +429,17 @@ void adjustServo(){
 }
 
 /*
- * Provided code from lab description. This code adjusts pulsewidth without having to recompile code.
+ * Provided code from lab description. This code adjusts Kp without having to recompile code.
+ * Mode1 - keyboard input
+ * Mode2 - Keypad input
  */
 unsigned int Update_Value(int Constant, unsigned char incr, int maxval, int minval, int mode) {
     int deflt = Kp;
     char input = 0;
     while(1) {
         if (mode == 1) input = getchar();
-        if (mode == 2){
-            input = read_keypad();
-            input -= 48;
-        }
+        if (mode == 2) input = read_keypad();
+        input -= 48;// convert from ascii to decimal
         if (input == 'c') Constant = deflt;
         if (input == 'i'){
             Constant += incr;
@@ -448,14 +455,10 @@ unsigned int Update_Value(int Constant, unsigned char incr, int maxval, int minv
     }
 }
 
-//-----------------------------------------------------------------------------
-// Port_Init
-//-----------------------------------------------------------------------------
-//
-// Set up ports for input and output
-//
-void Port_Init()
-{
+/*
+ * Port init ->  Set up ports for input and output
+ */
+void Port_Init() {
     P1MDOUT |= 0x0D;  //set output pin for CEX0, CEX2 and CEX3 in push-pull mode
     P3MDOUT &= ~0x80; //Set Slideswitch at P3.7 for input
     P3 |= 0x80;
@@ -466,25 +469,17 @@ void Port_Init()
 	P1 |= 0x08;
 }
 
-//-----------------------------------------------------------------------------
-// XBR0_Init
-//-----------------------------------------------------------------------------
-//
-// Set up the crossbar
-//
-void XBR0_Init()
-{
+/*
+ * XBR0_Init -  Set up the crossbar
+ */
+void XBR0_Init() {
     XBR0 = 0x27;  //configure crossbar as directed in the laboratory
-
 }
-//-----------------------------------------------------------------------------
-// PCA_Init
-//-----------------------------------------------------------------------------
-//
-// Set up Programmable Counter Array
-//
-void PCA_Init(void)
-{
+
+/*
+ * PCA - Init -> Set up Programmable Counter Array
+ */
+void PCA_Init(void) {
     PCA0MD = 0x81;
     PCA0CPM2 = PCA0CPM0 = 0xC2;
     EIE1 |= 0x08;
@@ -492,12 +487,9 @@ void PCA_Init(void)
     EA = 1;
 }
 
-//-----------------------------------------------------------------------------
-// PCA_ISR
-//-----------------------------------------------------------------------------
-//
-// Interrupt Service Routine for Programmable Counter Array Overflow Interrupt
-//
+/*
+ * PCA ISR -> Interrupt Service Routine for Programmable Counter Array Overflow Interrupt
+ */
 void PCA_ISR ( void ) __interrupt 9 {
     counter_PCA++;
     if (CF){
@@ -519,15 +511,21 @@ void PCA_ISR ( void ) __interrupt 9 {
         }
         PCA0 = PCA_START;
     }
-    PCA0CN &= 0xC0;
+    PCA0CN &= 0xC0; // handle other pca interrupt resources
 }
 
+/*
+ * Obtain the compass reading
+ */
 unsigned int ReadCompass(){
     i2c_read_data(addr_compass,2,CompassData,2);   //adress, byte to start, where to story, how many bytes to read
     heading = ((CompassData[0] << 8) | CompassData[1]); // turn 2 8-bit into one 16 bit
     return heading;
 }
 
+/*
+ * Utilize the proportional gain method to adjust heading
+ */
 void adjust_pw() {
 
     if (error > 1800){ // if your error is too high, reset it low. this keeps moves efficient
@@ -550,6 +548,9 @@ unsigned int ReadRanger() {
     return range;
 }
 
+/*
+ * Ensure both pulse widths are within accepted range
+ */
 void PreventExtreme(){
     if (PW_Motor > PW_MAX){
         PW_Motor = PW_MAX;
@@ -570,15 +571,13 @@ void SMB_Init(void){
     ENSMB = 1; // enable SMBus
 }
 
-void ADC_Init(void)
-{
+void ADC_Init(void) {
     REF0CN = 0x03; /* Set Vref to use internal reference voltage (2.4V) */
     ADC1CN = 0x80; /* Enable A/D converter (ADC1) */
     ADC1CF |= 0x01; /* Set A/D converter gain to 1 */
 }
 
-unsigned char read_AD_input(unsigned char n)
-{
+unsigned char read_AD_input(unsigned char n) {
     AMX1SL = n; /* Set P1.n as the analog input for ADC1 */
     ADC1CN = ADC1CN & ~0x20; /* Clear the “Conversion Completed” flag */
     ADC1CN = ADC1CN | 0x10; /* Initiate A/D conversion */
