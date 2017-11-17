@@ -32,7 +32,7 @@ unsigned int rangerCompare(unsigned int limit);
 //-----------------------------------------------------------------------------
 // Global Variables
 //-----------------------------------------------------------------------------
-unsigned char input, pw_percentage;
+unsigned char __xdata input, pw_percentage;
 unsigned char CompassData[2], RangerData[2];
 unsigned char new_heading = 0;
 unsigned char new_range = 0;
@@ -48,7 +48,8 @@ float Kp;
 unsigned int counter_PCA = 0;
 unsigned int PW_Servo, PW_Motor, motor_spd;
 unsigned int PCA_START = 28614; //65535-36921
-unsigned int PW_CENTER = 2769; // PulseWidth is about 1.5ms 2769
+unsigned int PW_CENTER = 2779; // PulseWidth is about 1.5ms 2769
+unsigned int PW_CTR_SERVO = 2779;
 unsigned int PW_MIN = 2031; // 1.1ms full reverse
 unsigned int PW_MAX = 3508; // 1.9ms full forward
 unsigned char addr_ranger = 0xE0; // address of ranger
@@ -73,7 +74,7 @@ void main(void)
 
     printf("Embedded Control Pulsewidth Calibration\r\n");
     PW_Motor = PW_CENTER;  // set pw to 1.5ms
-    PW_Servo = PW_CENTER;
+    PW_Servo = PW_CTR_SERVO;
     PCA0CP0 = 0xFFFF - PW_Motor;
     PCA0CP2 = 0xFFFF - PW_Servo;
     counter_PCA = 0; //reset counter
@@ -98,7 +99,6 @@ void main(void)
             }
             // encounters the 1st obstacle: turn left/right based on input
             if (stops == 0 && rangerCompare(50)){
-				printf("1st if block \r\n");
                 // stop the car
                 PW_Motor = PW_CENTER;
                 start_driving(); // sets the proper pulsewidth for the motor
@@ -118,7 +118,6 @@ void main(void)
                 stops ++;
             // encounters the 2nd obstacle: stop the car
             } else if (stops == 1 && rangerCompare(50)) {
-				printf("2nd if block \r\n");
                 PW_Motor = PW_CENTER;
                 start_driving();
 				stops ++;
@@ -126,7 +125,6 @@ void main(void)
 				PW_Motor = PW_CENTER;
                 start_driving();
 			} else { // normal driving mode
-				printf("3rd if block \r\n");
                 PW_Motor = motor_spd;
                 adjustServo();
                 start_driving();
@@ -134,8 +132,7 @@ void main(void)
             }
             PreventExtreme();
         } else { //SS is not on: set everything to neutral
-			printf("last if block \r\n");
-            PW_Servo = PW_CENTER; // Set Servo to neutral
+            PW_Servo = PW_CTR_SERVO; // Set Servo to neutral
             PCA0CPL0 = 0xFFFF - PW_Servo;
             PCA0CPH0 = (0xFFFF - PW_Servo) >> 8;
             PW_Motor = PW_CENTER; // set motor to neutral
@@ -145,9 +142,10 @@ void main(void)
         }
         // print ranger distance and compass heading
         pw_percentage = (abs(PW_Motor- PW_CENTER)*100)/(PW_MAX- PW_MIN);
-        printf("Heading: is %d\r\n", heading);
-        printf("Distance: %d cm \r\n", ranger_distance);
+        //printf("Heading: is %d\r\n", heading);
+        //printf("Distance: %d cm \r\n", ranger_distance);
         if (print_flag){ // update LCD
+			printf("%u %u %u\r\n",heading, ranger_distance, PW_Servo);
 			lcd_clear();
             lcd_print("direction: %u\nrange: %u\npw perc: %u\nbattery: %u\n",heading,ranger_distance,pw_percentage,read_AD_input(6));
             print_flag = 0;
@@ -376,6 +374,12 @@ void turn_right(){
         adjustServo();
         PW_Motor = motor_spd;
         start_driving();
+		if (print_flag){ // update LCD
+			printf("%u %u %u\r\n",heading, ranger_distance, PW_Servo);
+			lcd_clear();
+	        lcd_print("direction: %u\nrange: %u\npw perc: %u\nbattery: %u\n",heading,ranger_distance,pw_percentage,read_AD_input(6));
+	        print_flag = 0;
+    	}
     }
     motor_spd += 200; // set motor speed back to normal
     desired_heading = initial_heading;
@@ -394,6 +398,12 @@ void turn_left(){
 		adjustServo();
 		PW_Motor = motor_spd;
 		start_driving();
+		if (print_flag){ // update LCD
+			printf("%u %u %u\r\n",heading, ranger_distance, PW_Servo);
+			lcd_clear();
+	        lcd_print("direction: %u\nrange: %u\npw perc: %u\nbattery: %u\n",heading,ranger_distance,pw_percentage,read_AD_input(6));
+	        print_flag = 0;
+    	}
     }
 	motor_spd += 200; // set motor speed back to normal
 	desired_heading = initial_heading;
@@ -503,7 +513,7 @@ void PCA_ISR ( void ) __interrupt 9 {
             new_range = 1;//flag new range can be read
             ranger_count = 0;
         }
-        if (LCD_count >= 50){
+        if (LCD_count >= 20){// update the display every 400 ms
             print_flag = 1;
             LCD_count = 0;
         }
@@ -525,7 +535,7 @@ void adjust_pw() {
     } else if (error < -1800){ // if error is too high, reset low. this keeps moves efficient
         error = error + 3600;
     }
-    PW_Servo = Kp*(error) + PW_CENTER; // set new PW
+    PW_Servo = Kp*(error) + PW_CTR_SERVO + 100; // set new PW
     PCA0CPL0 = 0xFFFF - PW_Servo;
     PCA0CPH0 = (0xFFFF - PW_Servo) >> 8;
 }
