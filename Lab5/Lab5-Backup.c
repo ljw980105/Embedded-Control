@@ -14,19 +14,19 @@ void PreventExtreme(void);
 unsigned char read_AD_input(unsigned char n);
 void ADC_Init(void);
 void preselectRoll(void);
+void preselectRoll2(void);
+void preselectSteeringGain(void); //TODO: Delete when finished
+
 void read_accel(void);
 void set_gains(void);
 void set_steering_pw(void);
 void set_driving_pw(void);
-void start_steering(void);
-void start_driving(void);
-unsigned int Update_Value(int Constant, unsigned char incr, int maxval, int minval, int mode);
-void adjust_gain(void);
+void start_steering();
 
 //-----------------------------------------------------------------------------
 // Global Variables
 //-----------------------------------------------------------------------------
-unsigned char input,temp;
+unsigned char input, pw_percentage; // using __xdata to store large variables
 unsigned char print_flag = 0;
 unsigned char accels_count = 0;
 unsigned char accels_flag = 0;
@@ -34,8 +34,11 @@ unsigned char toggle_flag = 0;
 unsigned int reverse_count = 0;
 unsigned char LCD_count = 0;
 unsigned int multipleInput, i, stops;
+signed int error;
+int temp;
+float Kp;
 unsigned int counter_PCA = 0;
-unsigned int PW_Servo, PW_Motor;
+unsigned int PW_Servo, PW_Motor, motor_spd;
 unsigned int PCA_START = 28614; //65535-36921
 unsigned int PW_CENTER_MOTOR = 2779; // PulseWidth is about 1.5ms 2769
 unsigned int PW_CTR_SERVO = 2779;
@@ -43,15 +46,15 @@ unsigned int PW_MIN = 2031; // 1.1ms full reverse
 unsigned int PW_MAX = 3508; // 1.9ms full forward
 
 signed int avg_gx,avg_gy,gx,gy;
-unsigned char AccelData[4];
 unsigned char addr_accel = 0x3A;
+unsigned char AccelData[4];
 //respectively: steering gain, drive gain for x-dir & y-dir, integral gain
 unsigned char ks,kdx,kdy,ki;
 unsigned char front_back_pitch, side_to_side_roll;
 unsigned char battery_voltage;
 
 __sbit __at 0xB7 SS; // slide switch to enable/ disable servo and motor at P3.7
-__sbit __at 0x00 BUZZER; //TODO: Verify Buzzer Port
+__sbit __at 0xXX BUZZER; //TODO: Verify Buzzer Port
 
 //TODO: Question: is kdx or kdy front-back pitch? (Almost certain it's kdy)
 
@@ -175,15 +178,40 @@ void adjust_gain(){
 }
 
 /*
- * Enter the ks,ki values using the keypad
- */
+* Enter the ks,ki values using the keypad
+*/
 void set_gains(){
     lcd_clear();
 	lcd_print("Enter value for ks\r\n"); //steering feedback gain
 	ks = kpd_input(0);
 //	lcd_clear();
+//	lcd_print("Enter value for kdx\r\n");// x direction drive gain
+//	kdx = kpd_input(0);
+//	lcd_clear();
+//	lcd_print("Enter value for kdy\r\n");// y direction (front-back) drive gain
+//	kdy = kpd_input(0);
+//	lcd_clear();
 //	lcd_print("Enter value for ki\n "); // intergal gain
 //	ki  = kpd_input(0);
+//	lcd_clear();
+}
+
+/*
+ * Obtain ks via keying in a value using keyboard, entered digit by digit
+ */
+void preselectSteeringGain(){
+    unsigne int inputArr[2] = {0,0};
+    i = 0;
+    printf("Enter the gain for ks : steering gain \r\n");
+    while(i < 2){
+        printf("enter digit %d \r\n", i);
+        input = getchar();
+        input -= 48;
+        printf("\r\n");
+        inputArr[i] = input;
+        i ++;
+    }
+    ks = inputArr[0]*10 + inputArr[1];
 }
 
 /*
@@ -198,7 +226,7 @@ void set_steering_pw(){
  */
 void set_driving_pw(){
     PW_Motor = PW_CENTER_MOTOR + kdy * gy;
-    PW_Motor += kdx * abs(gx);
+    PW_Motor += kds * abs(gx);
 
     /* Optional - use integral gain
     PW_Motor += kdx * abs(gx) + ki * error_sum //ki is the integral gain error_sum += gy + abs(gx)
@@ -220,6 +248,77 @@ void start_driving(){
 void start_steering(){
     PreventExtreme();
     PCA0CP0 = 0xFFFF - PW_Servo;
+}
+
+/*
+ * Select from a predefined list of roll -> kdx (side to side tilt) or select manually
+ */
+void preselectRoll2(){
+    unsigned int __xdata inputArr[2] = {0,0}; // using __xdata to store large variables
+    i = 0;
+    printf("Enter 1 to select from the list of motor speeds, or enter 2 to select manually\r\n");
+    input = getchar();
+	input -= 48;
+	printf("\r\n");
+    if (input == 1){ // select from list
+        printf("Enter 1 to to select speed using the keyboard, or enter 2 to select from keypad\r\n");
+        input = getchar();
+		input -= 48;
+		printf("\r\n");
+        if (input == 1){
+            printf("Enter 1 for gain 1 , 2 for gain 15 ,3 for gain 35, or 4 for gain 50 \r\n");
+            input = getchar();
+			input -= 48;
+			printf("\r\n");
+        } else if (input == 2){
+            lcd_print("Enter 1 for gain 1 , 2 for gain 15 ,3 for gain 35, or 4 for gain 50 \r\n");
+            input = read_keypad(); // obtain input using keypad
+            input -= 48;
+			printf("\r\n");
+        }
+        switch (input){
+            case 1:
+                kdx = 1;
+                break;
+            case 2:
+                kdx = 15;
+                break;
+            case 3:
+                kdx = 35;
+                break;
+            case 4:
+                kdx = 50;
+                break;
+            default:
+                break;
+        }
+    } else if (input == 2){ // select manually
+        printf("Enter 1 to enter the heading using the Keypad, or enter 2 to enter using keyboard\r\n");
+        input = getchar();
+		input -= 48;
+		printf("\r\n");
+        switch (input){
+            case 1:
+                multipleInput = kpd_input(0);
+                kdx = multipleInput;// obtain input using keypad
+                break;
+            case 2:
+                // enter the 4 digits of heading digit by digit
+                while(i < 2){
+                    printf("enter digit %d \r\n", i);
+                    input = getchar();
+					input -= 48;
+					printf("\r\n");
+                    inputArr[i] = input;
+                    i ++;
+                }
+                //convert array to a 4 digit number
+                kdx = inputArr[0]*10 + inputArr[1];
+                break;
+            default:
+                break;
+        }
+    }
 }
 
 /*
@@ -259,7 +358,7 @@ void preselectRoll(){
 
 
 /*
- * Provided code from lab description. This code adjusts pitch without having to recompile code.
+ * Provided code from lab description. This code adjusts Kp without having to recompile code.
  * Mode1 - keyboard input
  * Mode2 - Keypad input
  */
@@ -343,6 +442,22 @@ void PCA_ISR ( void ) __interrupt 9 {
     }
     PCA0CN &= 0xC0; // handle other pca interrupt resources
 }
+
+/*
+ * Utilize the proportional gain method to adjust heading
+ */
+void adjust_pw() {
+
+    if (error > 1800){ // if your error is too high, reset it low. this keeps moves efficient
+        error = error - 3600;
+    } else if (error < -1800){ // if error is too high, reset low. this keeps moves efficient
+        error = error + 3600;
+    }
+    PW_Servo = Kp*(error) + PW_CTR_SERVO + 100; // set new PW
+    PCA0CPL0 = 0xFFFF - PW_Servo;
+    PCA0CPH0 = (0xFFFF - PW_Servo) >> 8;
+}
+
 
 /*
  * Ensure both pulse widths are within accepted range
