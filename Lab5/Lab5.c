@@ -22,6 +22,8 @@ void start_steering(void);
 void start_driving(void);
 unsigned int Update_Value(int Constant, unsigned char incr, int maxval, int minval, int mode);
 void adjust_gain(void);
+void updateFlatArr(void);
+unsigned int isFlat(void);
 
 //-----------------------------------------------------------------------------
 // Global Variables
@@ -42,16 +44,17 @@ unsigned int PW_CTR_SERVO = 2779;
 unsigned int PW_MIN = 2031; // 1.1ms full reverse
 unsigned int PW_MAX = 3508; // 1.9ms full forward
 
-signed int avg_gx,avg_gy,gx,gy;
-unsigned char AccelData[4];
-unsigned char addr_accel = 0x3A;
+signed int __xdata avg_gx,avg_gy,gx,gy;
+unsigned char __xdata AccelData[4];
+unsigned int __xdata isFlatArr[3]= {0,0,0}; // determine when the car stops at the top of ramp -> also a queue DS
 //respectively: steering gain, drive gain for x-dir & y-dir, integral gain
-unsigned char ks,kdx,kdy,ki;
-unsigned char front_back_pitch, side_to_side_roll;
+unsigned char __xdata ks,kdx,kdy,ki;
+unsigned char Kfront_back_pitch, Kside_to_side_roll; // pre-selected gain values
 unsigned char battery_voltage;
+signed int max_slope = 0;
 
 __sbit __at 0xB7 SS; // slide switch to enable/ disable servo and motor at P3.7
-__sbit __at 0x00 BUZZER; //TODO: Verify Buzzer Port
+__sbit __at 0xB6 BUZZER; //Buzzer at port 3.6
 
 //TODO: Question: is kdx or kdy front-back pitch? (Almost certain it's kdy)
 
@@ -83,15 +86,15 @@ void main(void){
         if (!SS) { // if SS is on
             if (stops == 0){
                 // read and ask the user to adjust the gains for the front-back pitch value
-                front_back_pitch = read_AD_input(7) / 5.1 ;  // read adc input at pin 1.7
-                printf("The ADC Conversion Result is %d \r\n", front_back_pitch);
+                Kfront_back_pitch = read_AD_input(7) / 5.1 ;  // read adc input at pin 1.7
+                printf("The ADC Conversion Result is %d \r\n", Kfront_back_pitch);
                 adjust_gain(); // adjust front-back-pitch using Update_Value() ( inside adjust_gain() )
                 preselectRoll(); // enter side-to-side-roll using keypad
                 set_gains(); //enter ks using keypad. Optional: use integral gain
                 stops ++;
 
-                kdx = side_to_side_roll;
-                kdy = front_back_pitch;
+                kdx = Kside_to_side_roll;
+                kdy = Kfront_back_pitch;
             }
             if (accels_flag){
                 read_accel();
@@ -140,12 +143,13 @@ void main(void){
 * Read 8 values from the accelerometer to average out the noise
 */
 void read_accel(){
+	//unsigned char addr_accel = 0x3A;
     avg_gy = avg_gx = gx = gy =0; // reset
 
     for (i = 0; i < 8; i++){ //8 iterations
-        i2c_read_data(addr_accel,0x27,AccelData,1);
+        i2c_read_data(0x3A,0x27,AccelData,1);
         if (AccelData[0] & 0x03 == 0x03){ // accelerometer ready
-            i2c_read_data(addr_accel,0x28|0x80,AccelData,4); //read accelerometer and store data
+            i2c_read_data(0x3A,0x28|0x80,AccelData,4); //read accelerometer and store data
             avg_gx += ((AccelData[1] << 8) >> 4); //store x data into total x data
             avg_gy += ((AccelData[3] << 8) >> 4); //store y data into total y data
         }
@@ -154,14 +158,16 @@ void read_accel(){
     avg_gx /= 8; //find average of x-direction acceleration
     gx = avg_gx;  // set gx and gy for later use
     gy = avg_gy;
+
+    if (gx > max_slope) max_slope = gx; // obtain max slope
 }
 
 /*
  * Adjust gain function: use existing gain or use the provided Update_Value() to adjust gain
  */
 void adjust_gain(){
-    temp = front_back_pitch;
-    lcd_print("1 - ADJUST, 2 - SKIP\r\n");
+    temp = Kfront_back_pitch;
+    lcd_print("1 ADJUST, 2 SKIP\r\n");
     input = getchar();
 	input -= 48;
 	printf("\r\n");
@@ -170,7 +176,7 @@ void adjust_gain(){
         lcd_print("Adjust the front-back pitch using keypad\r\n");
         lcd_print( "'c' - default, 'i' - increment, 'd' - decrement, 'u' - update and return deflt = Constant;\r\n");
         temp = Update_Value(temp, 20, 500, 0, 2);
-        front_back_pitch = temp / 10; // return a value within accepted range(0 - 50)
+        Kfront_back_pitch = temp / 10; // return a value within accepted range(0 - 50)
     }
 }
 
@@ -223,6 +229,27 @@ void start_steering(){
 }
 
 /*
+ * Queue data structure to store the latest 3 values of pitch
+ */
+void updateFlatArr(){
+    isFlatArr[0] = isFlatArr[1];
+    isFlatArr[1] = isFlatArr[2];
+    isFlatArr[2] = gx; // TODO: May be gy
+}
+
+/*
+ * All 3 values in the array have to be below the limit before the function returns true
+ * Prevents the problem ...
+ */
+unsigned int isFlat(void){
+    i = 0;
+    for ( i = 0; i < 3; i++) {
+      if (isFlatArr[0] < 30 ) return 0; // change the limit!
+    }
+    return 1;
+}
+
+/*
  * Select the side to side roll value using keypad
  */
 void preselectRoll(){
@@ -237,23 +264,23 @@ void preselectRoll(){
         lcd_print("\r\n");
         switch (input){
             case 1:
-                side_to_side_roll = 1;
+                Kside_to_side_roll = 1;
                 break;
             case 2:
-                side_to_side_roll = 15;
+                Kside_to_side_roll = 15;
                 break;
             case 3:
-                side_to_side_roll = 35;
+                Kside_to_side_roll = 35;
                 break;
             case 4:
-                side_to_side_roll = 50;
+                Kside_to_side_roll = 50;
                 break;
             default:
                 break;
         }
     } else if (input == 2){
         multipleInput = kpd_input(0);
-        side_to_side_roll = multipleInput;
+        Kside_to_side_roll = multipleInput;
     }
 }
 
@@ -264,7 +291,7 @@ void preselectRoll(){
  * Mode2 - Keypad input
  */
 unsigned int Update_Value(int Constant, unsigned char incr, int maxval, int minval, int mode) {
-    int deflt = front_back_pitch;
+    int deflt = Kfront_back_pitch;
     char input = 0;
     while(1) {
         if (mode == 1) input = getchar();
@@ -297,6 +324,7 @@ void Port_Init() {
 	P1MDIN &= ~0x80;
 	P1MDOUT &= ~0x80;
 	P1 |= 0x08;
+
 }
 
 /*
