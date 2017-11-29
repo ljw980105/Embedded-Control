@@ -25,6 +25,9 @@ void adjust_gain(void);
 void updateFlatArr(void);
 unsigned int isFlat(void);
 
+void updateBuzzerArr(void);
+unsigned int isReversed(void);
+
 //-----------------------------------------------------------------------------
 // Global Variables
 //-----------------------------------------------------------------------------
@@ -40,7 +43,7 @@ unsigned int counter_PCA = 0;
 unsigned int PW_Servo, PW_Motor;
 unsigned int PCA_START = 28614; //65535-36921
 unsigned int PW_CENTER_MOTOR = 2779; // PulseWidth is about 1.5ms 2769
-unsigned int PW_CTR_SERVO = 2779;
+unsigned int PW_CTR_SERVO = 3000;
 unsigned int PW_MIN = 2031; // 1.1ms full reverse
 unsigned int PW_MAX = 3508; // 1.9ms full forward
 
@@ -48,6 +51,7 @@ signed int __xdata avg_gx,avg_gy,gx,gy;
 unsigned char __xdata AccelData[4];
 unsigned int __xdata isFlatArr[3]= {0,0,0}; // determine when the car stops at the top of ramp -> also a queue DS
 //respectively: steering gain, drive gain for x-dir & y-dir, integral gain
+unsigned int __xdata isReversedArr[3]= {3000,3000,3000}; // determine when the car stops at the top of ramp -> also a queue DS
 unsigned char __xdata ks,kdx,kdy,ki;
 unsigned char Kfront_back_pitch, Kside_to_side_roll; // pre-selected gain values
 unsigned char battery_voltage;
@@ -81,6 +85,8 @@ void main(void){
     while(counter_PCA < 50);//wait for 1s for correct setup
 
     stops = 0;
+	lcd_clear();
+	BUZZER = 0;
 
     while(1) {
         if (!SS) { // if SS is on
@@ -89,6 +95,7 @@ void main(void){
                 Kfront_back_pitch = read_AD_input(7) / 5.1 ;  // read adc input at pin 1.7
                 printf("The ADC Conversion Result is %d \r\n", Kfront_back_pitch);
                 adjust_gain(); // adjust front-back-pitch using Update_Value() ( inside adjust_gain() )
+				//lcd_clear();
                 preselectRoll(); // enter side-to-side-roll using keypad
                 set_gains(); //enter ks using keypad. Optional: use integral gain
                 stops ++;
@@ -100,22 +107,26 @@ void main(void){
                 read_accel();
                 set_steering_pw();
                 set_driving_pw();
+				//if (PW_Motor < 2700) PW_Motor -= 300;// increase horsepower for reverse driving
                 start_driving();
                 start_steering();
                 accels_flag = 0;
             }
+			updateBuzzerArr();
 
             // if the car is driving reversely, execute the following code in cycle:
             // sound buzzer for .5 s and turn it off for 1s
-            if (PW_Motor < 2779){
+            if (isReversed()){			
                 if(toggle_flag){
                     BUZZER = 1; // sound buzzer
                     if(reverse_count % 25 == 0) toggle_flag = 0; // toggles after .5s
+					reverse_count = 0;
                 }
                 if (!toggle_flag){
                     BUZZER = 0; // turn off buzzer
                     if(reverse_count % 50 == 0) toggle_flag = 1; // toggles after 1s
-                }
+					reverse_count = 0;
+                }				
             } else {
                 BUZZER = 0; // turn off buzzer
             }
@@ -136,6 +147,8 @@ void main(void){
             lcd_print("ks: %u, kdx: %u, kdy: %u\nPWDrive: %u, PWServo: %u\n, Battery: %u\n",ks,kdx,kdy,PW_Motor, PW_Servo,battery_voltage);
             print_flag = 0;
         }
+
+		if (isFlat()) printf("The maximum slope is %d \r\n", max_slope);
     }
 }
 
@@ -168,8 +181,7 @@ void read_accel(){
 void adjust_gain(){
     temp = Kfront_back_pitch;
     lcd_print("1 ADJUST, 2 SKIP\r\n");
-    input = getchar();
-	input -= 48;
+    input = kpd_input(0);
 	printf("\r\n");
 
     if (input == 1){// this code block is skipped if input is 2
@@ -238,15 +250,31 @@ void updateFlatArr(){
 }
 
 /*
- * All 3 values in the array have to be below the limit before the function returns true
+ * All 3 values in the array have to be within the limit before the function returns true
  * Prevents the problem ...
  */
 unsigned int isFlat(void){
     i = 0;
     for ( i = 0; i < 3; i++) {
-      if (isFlatArr[0] < 30 ) return 0; // change the limit!
+      if (isFlatArr[i] < -20 || isFlatArr[i] > 20 ) return 0; // change the limit!
     }
     return 1;
+}
+
+void updateBuzzerArr(){
+	isReversedArr[0] = isReversedArr[1];
+	isReversedArr[1] = isReversedArr[2];
+	isReversedArr[2] = PW_Motor;
+
+}
+
+unsigned int isReversed(){
+	i = 0;
+	for ( i = 0; i < 3; i++) {
+      if (isReversedArr[i] > 2300 ) return 0; // change the limit!
+    }
+    return 1;
+
 }
 
 /*
@@ -254,13 +282,11 @@ unsigned int isFlat(void){
  */
 void preselectRoll(){
     lcd_print("Roll: Press 1 to select roll from a list, or press 2 to enter roll manually \r\n");
-    input = read_keypad();
-    input -= 48;
+    input = kpd_input(0);
     lcd_print("\r\n");
     if (input == 1){
         lcd_print("Enter 1 for gain 1 , 2 for gain 15 ,3 for gain 35, or 4 for gain 50 \r\n");
-        input = read_keypad(); // obtain input using keypad
-        input -= 48;
+        input = kpd_input(0); // obtain input using keypad
         lcd_print("\r\n");
         switch (input){
             case 1:
@@ -295,7 +321,9 @@ unsigned int Update_Value(int Constant, unsigned char incr, int maxval, int minv
     char input = 0;
     while(1) {
         if (mode == 1) input = getchar();
-        if (mode == 2) input = read_keypad();
+        if (mode == 2){
+			while (read_keypad() == 0xFF) input = read_keypad();
+		}
         input -= 48;// convert from ascii to decimal
         if (input == 'c') Constant = deflt;
         if (input == 'i'){
@@ -318,6 +346,7 @@ unsigned int Update_Value(int Constant, unsigned char incr, int maxval, int minv
 void Port_Init() {
     P1MDOUT |= 0x0D;  //set output pin for CEX0, CEX2 and CEX3 in push-pull mode
     P3MDOUT &= ~0x80; //Set Slideswitch at P3.7 for input
+	P3MDOUT |= 0x40;
     P3 |= 0x80;
 
 	//set up ADC conversion on Pin1.7
