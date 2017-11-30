@@ -1,4 +1,4 @@
-#include <c8051_SDCC.h>
+``````#include <c8051_SDCC.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <i2c.h>
@@ -27,6 +27,7 @@ unsigned int isFlat(void);
 
 void updateBuzzerArr(void);
 unsigned int isReversed(void);
+void calibrateAccel(void);
 
 //-----------------------------------------------------------------------------
 // Global Variables
@@ -38,7 +39,7 @@ unsigned char accels_flag = 0;
 unsigned char toggle_flag = 0;
 unsigned int reverse_count = 0;
 unsigned char LCD_count = 0;
-unsigned int multipleInput, i, stops;
+unsigned int multipleInput, i, stops, error_sum;
 unsigned int counter_PCA = 0;
 unsigned int PW_Servo, PW_Motor;
 unsigned int PCA_START = 28614; //65535-36921
@@ -47,11 +48,11 @@ unsigned int PW_CTR_SERVO = 3000;
 unsigned int PW_MIN = 2031; // 1.1ms full reverse
 unsigned int PW_MAX = 3508; // 1.9ms full forward
 
-signed int __xdata avg_gx,avg_gy,gx,gy;
+signed int __xdata avg_gx,avg_gy,gx,gy, gx_offset, gy_offset;
 unsigned char __xdata AccelData[4];
 unsigned int __xdata isFlatArr[3]= {0,0,0}; // determine when the car stops at the top of ramp -> also a queue DS
 //respectively: steering gain, drive gain for x-dir & y-dir, integral gain
-unsigned int __xdata isReversedArr[3]= {3000,3000,3000}; // determine when the car stops at the top of ramp -> also a queue DS
+unsigned int __xdata isReversedArr[3]= {3000,3000,3000}; // determine wh, en the car stops at the top of ramp -> also a queue DS
 unsigned char __xdata ks,kdx,kdy,ki;
 unsigned char Kfront_back_pitch, Kside_to_side_roll; // pre-selected gain values
 unsigned char battery_voltage;
@@ -87,6 +88,10 @@ void main(void){
     stops = 0;
 	lcd_clear();
 	BUZZER = 0;
+	error_sum = 0;
+	printf("Before calibration\r\n");
+	calibrateAccel();
+	printf("After calibration\r\n");
 
     while(1) {
         if (!SS) { // if SS is on
@@ -107,25 +112,30 @@ void main(void){
                 read_accel();
                 set_steering_pw();
                 set_driving_pw();
-				//if (PW_Motor < 2700) PW_Motor -= 300;// increase horsepower for reverse driving
+				if (PW_Motor < 2700) PW_Motor -= 300;// increase horsepower for reverse driving
                 start_driving();
                 start_steering();
                 accels_flag = 0;
             }
 			updateBuzzerArr();
+			updateFlatArr();
 
             // if the car is driving reversely, execute the following code in cycle:
             // sound buzzer for .5 s and turn it off for 1s
             if (isReversed()){			
                 if(toggle_flag){
                     BUZZER = 1; // sound buzzer
-                    if(reverse_count % 25 == 0) toggle_flag = 0; // toggles after .5s
-					reverse_count = 0;
+                    if(reverse_count > 25 ){ // toggles after .5s
+						toggle_flag = 0;
+						reverse_count = 0;
+					}
                 }
                 if (!toggle_flag){
                     BUZZER = 0; // turn off buzzer
-                    if(reverse_count % 50 == 0) toggle_flag = 1; // toggles after 1s
-					reverse_count = 0;
+                    if(reverse_count > 50) {
+						toggle_flag = 1; // toggles after 1s
+						reverse_count = 0;
+					}
                 }				
             } else {
                 BUZZER = 0; // turn off buzzer
@@ -160,19 +170,39 @@ void read_accel(){
     avg_gy = avg_gx = gx = gy =0; // reset
 
     for (i = 0; i < 8; i++){ //8 iterations
+		while(!accels_flag);
+        i2c_read_data(0x3A,0x27,AccelData,1);
+        if (AccelData[0] & 0x03 == 0x03){ // accelerometer ready
+            i2c_read_data(0x3A,0x28|0x80,AccelData,4); //read accelerometer and store data
+            avg_gx += ((AccelData[1] << 8) >> 4) - gx_offset; //store x data into total x data
+            avg_gy += ((AccelData[3] << 8) >> 4) - gy_offset;;  //store y data into total y data
+        }
+		accels_flag = 0;
+    }
+    avg_gy /= 8; //find average of y-direction acceleration
+    avg_gx /= 8; //find average of x-direction acceleration
+    gx = avg_gx;  // set gx and gy for later use
+    gy = avg_gy * 2;
+
+    if (gx > max_slope) max_slope = gx; // obtain max slope
+}
+
+void calibrateAccel(){
+	avg_gy = avg_gx = gx = gy =0; // reset
+    for (i = 0; i < 64; i++){ //8 iterations
+		while(!accels_flag);
         i2c_read_data(0x3A,0x27,AccelData,1);
         if (AccelData[0] & 0x03 == 0x03){ // accelerometer ready
             i2c_read_data(0x3A,0x28|0x80,AccelData,4); //read accelerometer and store data
             avg_gx += ((AccelData[1] << 8) >> 4); //store x data into total x data
             avg_gy += ((AccelData[3] << 8) >> 4); //store y data into total y data
         }
+		accels_flag = 0;
     }
-    avg_gy /= 8; //find average of y-direction acceleration
-    avg_gx /= 8; //find average of x-direction acceleration
-    gx = avg_gx;  // set gx and gy for later use
-    gy = avg_gy;
-
-    if (gx > max_slope) max_slope = gx; // obtain max slope
+    avg_gy /= 64; //find average of y-direction acceleration
+    avg_gx /= 64; //find average of x-direction acceleration
+    gx_offset = avg_gx;  // set gx and gy for later use
+    gy_offset = avg_gy;
 }
 
 /*
@@ -246,7 +276,7 @@ void start_steering(){
 void updateFlatArr(){
     isFlatArr[0] = isFlatArr[1];
     isFlatArr[1] = isFlatArr[2];
-    isFlatArr[2] = gx; // TODO: May be gy
+    isFlatArr[2] = gy; // TODO: May be gy
 }
 
 /*
@@ -271,7 +301,7 @@ void updateBuzzerArr(){
 unsigned int isReversed(){
 	i = 0;
 	for ( i = 0; i < 3; i++) {
-      if (isReversedArr[i] > 2300 ) return 0; // change the limit!
+      if (isReversedArr[i] > 2700) return 0; // change the limit!
     }
     return 1;
 
@@ -392,9 +422,6 @@ void PCA_ISR ( void ) __interrupt 9 {
         if (accels_count >= 1){
             accels_flag = 1;
             accels_count = 0;
-        }
-        if (reverse_count >= 51){
-            reverse_count = 0;
         }
         PCA0 = PCA_START;
     }
