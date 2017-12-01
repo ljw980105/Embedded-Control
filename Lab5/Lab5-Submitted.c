@@ -255,11 +255,7 @@ void set_steering_pw(){
  */
 void set_driving_pw(){
     PW_Motor = PW_CENTER_MOTOR + kdy * gy;
-    if (gy > 0){
-		PW_Motor += kdx * abs(gx);
-	} else if (gy < 0){
-		PW_Motor -= kdx * abs(gx);
-	}
+    PW_Motor += kdx * abs(gx);
 
     /* Optional - use integral gain
     PW_Motor += kdx * abs(gx) + ki * error_sum //ki is the integral gain error_sum += gy + abs(gx)
@@ -290,7 +286,7 @@ void updateFlatArr(){
 	for (flat_counter = 0; flat_counter < 4; flat_counter ++){
 		isFlatArr[flat_counter] = isFlatArr[flat_counter + 1];
 	}
-    isFlatArr[4] = gy; // TODO: May be gy
+    isFlatArr[4] = gy;
 }
 
 /*
@@ -320,12 +316,12 @@ void updateBuzzerArr(){
 	isReversedArr[0] = isReversedArr[1];
 	isReversedArr[1] = isReversedArr[2];
 	isReversedArr[2] = PW_Motor;
-
 }
+
 unsigned int isReversed(){
 	i = 0;
 	for ( i = 0; i < 3; i++) {
-      if (isReversedArr[i] > 2700) return 0; // change the limit!
+      if (isReversedArr[i] > 2700) return 0;
     }
     return 1;
 
@@ -407,7 +403,6 @@ void Port_Init() {
 	P1MDIN &= ~0x80;
 	P1MDOUT &= ~0x80;
 	P1 |= 0x08;
-
 }
 
 /*
