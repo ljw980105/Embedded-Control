@@ -1,4 +1,4 @@
-``````#include <c8051_SDCC.h>
+#include <c8051_SDCC.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <i2c.h>
@@ -39,18 +39,18 @@ unsigned char accels_flag = 0;
 unsigned char toggle_flag = 0;
 unsigned int reverse_count = 0;
 unsigned char LCD_count = 0;
-unsigned int multipleInput, i, stops, error_sum;
+unsigned int multipleInput, i, stops, error_sum, flat_counter;
 unsigned int counter_PCA = 0;
-unsigned int PW_Servo, PW_Motor;
+unsigned long __xdata PW_Servo, PW_Motor;
 unsigned int PCA_START = 28614; //65535-36921
 unsigned int PW_CENTER_MOTOR = 2779; // PulseWidth is about 1.5ms 2769
-unsigned int PW_CTR_SERVO = 3000;
+unsigned int PW_CTR_SERVO = 2969;
 unsigned int PW_MIN = 2031; // 1.1ms full reverse
 unsigned int PW_MAX = 3508; // 1.9ms full forward
 
 signed int __xdata avg_gx,avg_gy,gx,gy, gx_offset, gy_offset;
 unsigned char __xdata AccelData[4];
-unsigned int __xdata isFlatArr[3]= {0,0,0}; // determine when the car stops at the top of ramp -> also a queue DS
+unsigned int __xdata isFlatArr[20]= {0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0}; // determine when the car stops at the top of ramp -> also a queue DS
 //respectively: steering gain, drive gain for x-dir & y-dir, integral gain
 unsigned int __xdata isReversedArr[3]= {3000,3000,3000}; // determine wh, en the car stops at the top of ramp -> also a queue DS
 unsigned char __xdata ks,kdx,kdy,ki;
@@ -118,7 +118,6 @@ void main(void){
                 accels_flag = 0;
             }
 			updateBuzzerArr();
-			updateFlatArr();
 
             // if the car is driving reversely, execute the following code in cycle:
             // sound buzzer for .5 s and turn it off for 1s
@@ -152,13 +151,20 @@ void main(void){
         if (print_flag){ // update LCD
             battery_voltage = read_AD_input(6);
 			printf("gx: %d gy: %d kdx: %d kdy: %d ks: %d \r\n"
-                           "PW_Motor: %d PW_Servo: %d Battery: %d \r\n",gx,gy,kdx,kdy,ks,PW_Motor,PW_Servo,battery_voltage);
+                           "PW_Motor: %ld PW_Servo: %ld Battery: %d \r\n",gx,gy,kdx,kdy,ks,PW_Motor,PW_Servo,battery_voltage);
 			lcd_clear();
-            lcd_print("ks: %u, kdx: %u, kdy: %u\nPWDrive: %u, PWServo: %u\n, Battery: %u\n",ks,kdx,kdy,PW_Motor, PW_Servo,battery_voltage);
+            lcd_print("ks: %u, kdx: %u, kdy: %u\nPWDrive: %ld, PWServo: %ld\n, Battery: %u\n",ks,kdx,kdy,PW_Motor, PW_Servo,battery_voltage);
             print_flag = 0;
         }
 
-		if (isFlat()) printf("The maximum slope is %d \r\n", max_slope);
+		if (isFlat()){
+			 printf("The maximum slope is %d \r\n", max_slope);
+			 PW_Motor = PW_CENTER_MOTOR;
+			 PW_Servo = PW_CTR_SERVO;
+			 start_driving();
+             start_steering();
+			 //break;
+		}
     }
 }
 
@@ -169,7 +175,7 @@ void read_accel(){
 	//unsigned char addr_accel = 0x3A;
     avg_gy = avg_gx = gx = gy =0; // reset
 
-    for (i = 0; i < 8; i++){ //8 iterations
+    for (i = 0; i < 16; i++){ //8 iterations
 		while(!accels_flag);
         i2c_read_data(0x3A,0x27,AccelData,1);
         if (AccelData[0] & 0x03 == 0x03){ // accelerometer ready
@@ -179,12 +185,15 @@ void read_accel(){
         }
 		accels_flag = 0;
     }
-    avg_gy /= 8; //find average of y-direction acceleration
-    avg_gx /= 8; //find average of x-direction acceleration
+    avg_gy /= 16; //find average of y-direction acceleration
+    avg_gx /= 16; //find average of x-direction acceleration
     gx = avg_gx;  // set gx and gy for later use
-    gy = avg_gy * 2;
+    gy = avg_gy;
+	updateFlatArr();
 
-    if (gx > max_slope) max_slope = gx; // obtain max slope
+	if (gy < 100) gy  *= 0.5;
+
+    if (abs(gx) > max_slope) max_slope = abs(gx); // obtain max slope
 }
 
 void calibrateAccel(){
@@ -246,7 +255,11 @@ void set_steering_pw(){
  */
 void set_driving_pw(){
     PW_Motor = PW_CENTER_MOTOR + kdy * gy;
-    PW_Motor += kdx * abs(gx);
+    if (gy > 0){
+		PW_Motor += kdx * abs(gx);
+	} else if (gy < 0){
+		PW_Motor -= kdx * abs(gx);
+	}
 
     /* Optional - use integral gain
     PW_Motor += kdx * abs(gx) + ki * error_sum //ki is the integral gain error_sum += gy + abs(gx)
@@ -274,9 +287,16 @@ void start_steering(){
  * Queue data structure to store the latest 3 values of pitch
  */
 void updateFlatArr(){
-    isFlatArr[0] = isFlatArr[1];
+	flat_counter = 0;
+	for (; flat_counter < 19; flat_counter ++){
+		isFlatArr[flat_counter] = isFlatArr[flat_counter + 1];
+	}
+    /*isFlatArr[0] = isFlatArr[1];
     isFlatArr[1] = isFlatArr[2];
-    isFlatArr[2] = gy; // TODO: May be gy
+	isFlatArr[2] = isFlatArr[3];
+	isFlatArr[3] = isFlatArr[4];*/
+
+    isFlatArr[19] = gy; // TODO: May be gy
 }
 
 /*
@@ -284,11 +304,15 @@ void updateFlatArr(){
  * Prevents the problem ...
  */
 unsigned int isFlat(void){
+	flat_counter = 0;
     i = 0;
-    for ( i = 0; i < 3; i++) {
-      if (isFlatArr[i] < -20 || isFlatArr[i] > 20 ) return 0; // change the limit!
+    for ( i = 0; i < 20; i++) {
+      if (isFlatArr[i] > -32 && isFlatArr[i] < 32 ){
+	  	flat_counter ++;	  	
+	  }
     }
-    return 1;
+    if (flat_counter >= 2) return 1;
+	return 0;
 }
 
 void updateBuzzerArr(){
@@ -297,7 +321,6 @@ void updateBuzzerArr(){
 	isReversedArr[2] = PW_Motor;
 
 }
-
 unsigned int isReversed(){
 	i = 0;
 	for ( i = 0; i < 3; i++) {
