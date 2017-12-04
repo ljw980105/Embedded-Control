@@ -24,7 +24,6 @@ unsigned int Update_Value(int Constant, unsigned char incr, int maxval, int minv
 void adjust_gain(void);
 void updateFlatArr(void);
 unsigned int isFlat(void);
-
 void updateBuzzerArr(void);
 unsigned int isReversed(void);
 void calibrateAccel(void);
@@ -39,7 +38,7 @@ unsigned char accels_flag = 0;
 unsigned char toggle_flag = 0;
 unsigned int reverse_count = 0;
 unsigned char LCD_count = 0;
-unsigned int multipleInput, i, stops, error_sum, flat_counter;
+unsigned int multipleInput, i, stops, flat_counter;
 unsigned int counter_PCA = 0;
 unsigned long __xdata PW_Servo, PW_Motor;
 unsigned int PCA_START = 28614; //65535-36921
@@ -60,8 +59,6 @@ signed int max_slope = 0;
 
 __sbit __at 0xB7 SS; // slide switch to enable/ disable servo and motor at P3.7
 __sbit __at 0xB6 BUZZER; //Buzzer at port 3.6
-
-//TODO: Question: is kdx or kdy front-back pitch? (Almost certain it's kdy)
 
 //-----------------------------------------------------------------------------
 // Main Function
@@ -88,7 +85,6 @@ void main(void){
     stops = 0;
 	lcd_clear();
 	BUZZER = 0;
-	error_sum = 0;
 	printf("Before calibration\r\n");
 	calibrateAccel();
 	printf("After calibration\r\n");
@@ -107,11 +103,10 @@ void main(void){
                 kdx = Kside_to_side_roll;
                 kdy = Kfront_back_pitch;
             }
-            if (accels_flag){
+            if (accels_flag){ // read accel values and enable driving
                 read_accel();
                 set_steering_pw();
                 set_driving_pw();
-				if (PW_Motor < 2700) PW_Motor -= 300;// increase horsepower for reverse driving
                 start_driving();
                 start_steering();
                 accels_flag = 0;
@@ -123,7 +118,7 @@ void main(void){
             if (isReversed()){			
                 if(toggle_flag){
                     BUZZER = 1; // sound buzzer
-                    if(reverse_count > 25 ){ // toggles after .5s
+                    if( reverse_count > 25 ){ // toggles after .5s
 						toggle_flag = 0;
 						reverse_count = 0;
 					}
@@ -156,9 +151,8 @@ void main(void){
             lcd_print("ks: %u, kdx: %u, kdy: %u\nPWDrive: %ld, PWServo: %ld\n, Battery: %u\n",ks,kdx,kdy,PW_Motor, PW_Servo,battery_voltage);
             print_flag = 0;
         }
-		
 
-		if (isFlat()){
+		if (isFlat()){ // if the car is resting on top of ramp, print out max slope and force the car to stop
 			 printf("The maximum slope is %d \r\n", max_slope);
 			 PW_Motor = PW_CENTER_MOTOR;
 			 PW_Servo = PW_CTR_SERVO;
@@ -169,19 +163,18 @@ void main(void){
 }
 
 /*
-* Read 8 values from the accelerometer to average out the noise
+* Read 16 values from the accelerometer to average out the noise
 */
 void read_accel(){
-	//unsigned char addr_accel = 0x3A;
     avg_gy = avg_gx = gx = gy =0; // reset
 
-    for (i = 0; i < 16; i++){ //8 iterations
-		while(!accels_flag);
+    for (i = 0; i < 16; i++){ //16 iterations
+		while(!accels_flag); // reads every 20 ms
         i2c_read_data(0x3A,0x27,AccelData,1);
         if (AccelData[0] & 0x03 == 0x03){ // accelerometer ready
             i2c_read_data(0x3A,0x28|0x80,AccelData,4); //read accelerometer and store data
-            avg_gx += ((AccelData[1] << 8) >> 4) - gx_offset; //store x data into total x data
-            avg_gy += ((AccelData[3] << 8) >> 4) - gy_offset;;  //store y data into total y data
+            avg_gx += ((AccelData[1] << 8) >> 4) - gx_offset; //store x data into total x data and subtract offset from it
+            avg_gy += ((AccelData[3] << 8) >> 4) - gy_offset; //store y data into total y data and subtract offset from it
         }
 		accels_flag = 0;
     }
@@ -189,17 +182,18 @@ void read_accel(){
     avg_gx /= 16; //find average of x-direction acceleration
     gx = avg_gx;  // set gx and gy for later use
     gy = avg_gy;
-	updateFlatArr();
-
-	if (gy < 100) gy  *= 0.5;
+	updateFlatArr(); // update the flat queue ( every 320ms )
 
     if (abs(gx) > max_slope) max_slope = abs(gx); // obtain max slope
 }
 
+/*
+ * Calibrate the accelerometer with 64 different reads and generate a gx offset and a gy offset value
+ */
 void calibrateAccel(){
 	avg_gy = avg_gx = gx = gy =0; // reset
-    for (i = 0; i < 64; i++){ //8 iterations
-		while(!accels_flag);
+    for (i = 0; i < 64; i++){ //64 iterations
+		while(!accels_flag); // reads every 20 ms
         i2c_read_data(0x3A,0x27,AccelData,1);
         if (AccelData[0] & 0x03 == 0x03){ // accelerometer ready
             i2c_read_data(0x3A,0x28|0x80,AccelData,4); //read accelerometer and store data
@@ -232,14 +226,14 @@ void adjust_gain(){
 }
 
 /*
- * Enter the ks,ki values using the keypad
+ * Enter the ks,ki values using the keypad -> Ki is optional
  */
 void set_gains(){
     lcd_clear();
 	lcd_print("Enter value for ks\r\n"); //steering feedback gain
 	ks = kpd_input(0);
 //	lcd_clear();
-//	lcd_print("Enter value for ki\n "); // intergal gain
+//	lcd_print("Enter value for ki\n "); // optional -> integral gain
 //	ki  = kpd_input(0);
 }
 
@@ -257,14 +251,14 @@ void set_driving_pw(){
     PW_Motor = PW_CENTER_MOTOR + kdy * gy;
     PW_Motor += kdx * abs(gx);
 
-    /* Optional - use integral gain
+    /* //Optional - use integral gain
     PW_Motor += kdx * abs(gx) + ki * error_sum //ki is the integral gain error_sum += gy + abs(gx)
     error_sum += gy + abs(gx)
     */
 }
 
 /*
- * sets proper pulsewidth for the motor
+ * sets proper pulse width for the motor
  */
 void start_driving(){
     PreventExtreme();
@@ -272,7 +266,7 @@ void start_driving(){
 }
 
 /*
- * sets proper pulsewidth for the Servo
+ * sets proper pulse width for the Servo
  */
 void start_steering(){
     PreventExtreme();
@@ -290,41 +284,39 @@ void updateFlatArr(){
 }
 
 /*
- * All 3 values in the array have to be within the limit before the function returns true
- * Prevents the problem ...
+ * If the array is with the flat range (abs(gy) < 16) for 5*20 = 100 ms, then we
+ * can determine that the car has reached the top of ramp, hence returning 1
+ * 2 out of 5 values in the array have to be below the limit for the fn to return true
  */
 unsigned int isFlat(void){
 	flat_counter = 0;
     i = 0;
-	printf("Flat Array Contents: ");
     for ( i = 0; i < 5; i++) {
-	  	printf("%d ", isFlatArr[i]);
-      	if (abs(isFlatArr[i]) < 16 ){
-	  		flat_counter ++;	  	
-	  	}
+      	if (abs(isFlatArr[i]) < 16 ) flat_counter ++;
     }
-	printf("\r\n");
-	printf("flat counter is %d\r\n",flat_counter);
-    if (flat_counter >= 2){
-		 printf("isFlat Called \r\n");
-		 return 1;
-	}
+    if (flat_counter >= 2) return 1;
 	return 0;
-}
+}W
 
+/*
+ * Implement a queue data structure for PW_Motor values:
+ * This array holds 3 of the latest P_Motor values
+ */
 void updateBuzzerArr(){
 	isReversedArr[0] = isReversedArr[1];
 	isReversedArr[1] = isReversedArr[2];
 	isReversedArr[2] = PW_Motor;
 }
 
+/*
+ * Everything in the reversed array has to be reversed (PW < 2700) for the function to return true
+ */
 unsigned int isReversed(){
 	i = 0;
 	for ( i = 0; i < 3; i++) {
       if (isReversedArr[i] > 2700) return 0;
     }
     return 1;
-
 }
 
 /*
@@ -334,7 +326,7 @@ void preselectRoll(){
     lcd_print("Roll: Press 1 to select roll from a list, or press 2 to enter roll manually \r\n");
     input = kpd_input(0);
     lcd_print("\r\n");
-    if (input == 1){
+    if (input == 1){ // mode 1: select from a list of roll values
         lcd_print("Enter 1 for gain 1 , 2 for gain 15 ,3 for gain 35, or 4 for gain 50 \r\n");
         input = kpd_input(0); // obtain input using keypad
         lcd_print("\r\n");
@@ -354,7 +346,7 @@ void preselectRoll(){
             default:
                 break;
         }
-    } else if (input == 2){
+    } else if (input == 2){ // mode 2: select via manual input
         multipleInput = kpd_input(0);
         Kside_to_side_roll = multipleInput;
     }
@@ -396,7 +388,7 @@ unsigned int Update_Value(int Constant, unsigned char incr, int maxval, int minv
 void Port_Init() {
     P1MDOUT |= 0x0D;  //set output pin for CEX0, CEX2 and CEX3 in push-pull mode
     P3MDOUT &= ~0x80; //Set Slideswitch at P3.7 for input
-	P3MDOUT |= 0x40;
+	P3MDOUT |= 0x40; // Set up Buzzer at P3.6
     P3 |= 0x80;
 
 	//set up ADC conversion on Pin1.7
@@ -438,7 +430,7 @@ void PCA_ISR ( void ) __interrupt 9 {
             print_flag = 1;
             LCD_count = 0;
         }
-        if (accels_count >= 1){
+        if (accels_count >= 1){ // update accels flag every 20 ms
             accels_flag = 1;
             accels_count = 0;
         }

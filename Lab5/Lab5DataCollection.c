@@ -111,6 +111,7 @@ void main(void){
                 read_accel();
                 set_steering_pw();
                 set_driving_pw();
+				printf("%d %d %ld %ld \r\n", gx,gy, PW_Motor, PW_Servo);
 				if (PW_Motor < 2700) PW_Motor -= 300;// increase horsepower for reverse driving
                 start_driving();
                 start_steering();
@@ -150,8 +151,8 @@ void main(void){
 		
         if (print_flag){ // update LCD
             battery_voltage = read_AD_input(6);
-			printf("gx: %d gy: %d kdx: %d kdy: %d ks: %d \r\n"
-                           "PW_Motor: %ld PW_Servo: %ld Battery: %d \r\n",gx,gy,kdx,kdy,ks,PW_Motor,PW_Servo,battery_voltage);
+//			printf("gx: %d gy: %d kdx: %d kdy: %d ks: %d \r\n"
+//                           "PW_Motor: %ld PW_Servo: %ld Battery: %d \r\n",gx,gy,kdx,kdy,ks,PW_Motor,PW_Servo,battery_voltage);
 			lcd_clear();
             lcd_print("ks: %u, kdx: %u, kdy: %u\nPWDrive: %ld, PWServo: %ld\n, Battery: %u\n",ks,kdx,kdy,PW_Motor, PW_Servo,battery_voltage);
             print_flag = 0;
@@ -159,7 +160,7 @@ void main(void){
 		
 
 		if (isFlat()){
-			 printf("The maximum slope is %d \r\n", max_slope);
+			// printf("The maximum slope is %d \r\n", max_slope);
 			 PW_Motor = PW_CENTER_MOTOR;
 			 PW_Servo = PW_CTR_SERVO;
 			 start_driving();
@@ -175,7 +176,7 @@ void read_accel(){
 	//unsigned char addr_accel = 0x3A;
     avg_gy = avg_gx = gx = gy =0; // reset
 
-    for (i = 0; i < 16; i++){ //8 iterations
+    for (i = 0; i < 10; i++){ //8 iterations
 		while(!accels_flag);
         i2c_read_data(0x3A,0x27,AccelData,1);
         if (AccelData[0] & 0x03 == 0x03){ // accelerometer ready
@@ -185,13 +186,13 @@ void read_accel(){
         }
 		accels_flag = 0;
     }
-    avg_gy /= 16; //find average of y-direction acceleration
-    avg_gx /= 16; //find average of x-direction acceleration
+    avg_gy /= 10; //find average of y-direction acceleration
+    avg_gx /= 10; //find average of x-direction acceleration
     gx = avg_gx;  // set gx and gy for later use
     gy = avg_gy;
 	updateFlatArr();
-
 	if (gy < 100) gy  *= 0.5;
+
 
     if (abs(gx) > max_slope) max_slope = abs(gx); // obtain max slope
 }
@@ -300,17 +301,12 @@ void updateFlatArr(){
 unsigned int isFlat(void){
 	flat_counter = 0;
     i = 0;
-	printf("Flat Array Contents: ");
     for ( i = 0; i < 5; i++) {
-	  	printf("%d ", isFlatArr[i]);
       	if (abs(isFlatArr[i]) < 16 ){
 	  		flat_counter ++;	  	
 	  	}
     }
-	printf("\r\n");
-	printf("flat counter is %d\r\n",flat_counter);
     if (flat_counter >= 2){
-		 printf("isFlat Called \r\n");
 		 return 1;
 	}
 	return 0;
