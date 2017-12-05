@@ -34,7 +34,7 @@ void makeThrustVertical(void);
 // Global Variables
 //-----------------------------------------------------------------------------
 unsigned char __xdata input, pw_percentage; // using __xdata to store large variables
-unsigned char CompassData[2], RangerData[2];
+unsigned char __xdata CompassData[2], RangerData[2];
 unsigned char new_heading = 0;
 unsigned char new_range = 0;
 unsigned char print_flag = 0;
@@ -46,13 +46,13 @@ signed int error, prev_error;
 int Kp_temp;
 float Kp, Kd;
 unsigned int counter_PCA = 0;
-unsigned int PWLeftThrust, PWThrustAngle, PWRightThrust, motor_spd;
-unsigned int PCA_START = 28614; //65535-36921
-unsigned int PWCtrThrustAngle = 2779; // PulseWidth is about 1.5ms 2769
-unsigned int PWCtrLeftThrust = 2779;
-unsigned int PWCtrRightThrust = 2779;
-unsigned int PW_MIN = 2031;
-unsigned int PW_MAX = 3508;
+int __xdata PWLeftThrust, PWThrustAngle, PWRightThrust, motor_spd;
+int __xdata PCA_START = 28614; //65535-36921
+int __xdata PWCtrThrustAngle = 2779; // PulseWidth is about 1.5ms 2769
+int __xdata PWCtrLeftThrust = 2779;
+int __xdata PWCtrRightThrust = 2779;
+int PW_MIN = 2031;
+int PW_MAX = 3508;
 unsigned char addr_ranger = 0xE0; // address of ranger
 unsigned char addr_compass = 0xC0; // address of compass
 unsigned int __xdata RangerArray[2] = {0,0}; // implement a queue data structure
@@ -74,7 +74,7 @@ void main(void)
     SMB_Init();
 
     printf("Embedded Control Pulsewidth Calibration\r\n");
-    PWThrustAngle = PWCtrThrustAngle;  // set pw to 1.5ms
+    PWThrustAngle = 3060; // start out @ vertical
     PWLeftThrust = PWCtrLeftThrust;
     PWRightThrust = PWCtrRightThrust;
     PCA0CP1 = 0xFFFF - PWThrustAngle; // thrust angle fan @ CEX1
@@ -90,6 +90,11 @@ void main(void)
 
     while(1) {
         maintainHeading();
+		//PWRightThrust = PWCtrRightThrust + 200 ;
+	    //PWLeftThrust = PWCtrLeftThrust - 200 ;
+
+    	//PCA0CP2 = 0xFFFF - PWLeftThrust; // left thrust fan @ CEX2
+    	//PCA0CP3 = 0xFFFF - PWRightThrust; // right thrust fan @ CEX3
     }
 }
 
@@ -119,14 +124,6 @@ unsigned int rangerCompareMore(unsigned int limit){
         if (RangerArray[i] < limit) return 0;
     }
     return 1;
-}
-
-/*
- * implement a queue data structure: this array holds 2 of the latest range values
- */
-void updateRangerArray(){
-    RangerArray[0] = RangerArray[1];
-    RangerArray[1] = ranger_distance;
 }
 
 /*
@@ -253,13 +250,21 @@ void maintainHeading(){
     }*/
 
     // using control algorithm 6 from worksheet 11
-    PWThrustAngle = (long)PWThrustAngle + (long)(Kp * long(error)) + long(Kd * long(error - prev_error));
-    PWRightThrust= (long)-1*PWRightThrust + (long)(Kp * long(error)) + long(Kd * long(error - prev_error));
-    PWLeftThrust = (long)PWLeftThrust + (long)(Kp * long(error)) + long(Kd * long(error - prev_error));
+    //PWThrustAngle = (long)PWThrustAngle + (long)(Kp * (long)error) + (long)(Kd * (long)(error - prev_error));
+    //PWRightThrust= (int)PWCtrRightThrust - (int)((Kp * (int)(error)) + (int)(Kd * (int)((int)error - (int)prev_error));
+    //PWLeftThrust = (int)PWCtrLeftThrust + (int)((Kp * (int)error) + (int)(Kd * (int)((int)error - (int)prev_error));
 
-    PCA0CP1 = 0xFFFF - PWThrustAngle; // thrust angle fan @ CEX1
+	PWRightThrust = PWCtrRightThrust + (int)Kp * (int) (error) + (int)Kd * (int) (error - prev_error);
+	PWLeftThrust = PWCtrLeftThrust -   (int)Kp * (int) (error) - (int)Kd * (int) (error - prev_error);
+
+	PreventExtreme();
+
+    //PCA0CP1 = 0xFFFF - PWThrustAngle; // thrust angle fan @ CEX1
     PCA0CP2 = 0xFFFF - PWLeftThrust; // left thrust fan @ CEX2
     PCA0CP3 = 0xFFFF - PWRightThrust; // right thrust fan @ CEX3
+
+	printf("Left thrust PW: %d ", PWLeftThrust);
+	printf("Right thrust PW: %d \r\n", PWRightThrust);
 
     prev_error = error;
 }
@@ -280,7 +285,7 @@ void adjustServo(){
  * Port init ->  Set up ports for input and output
  */
 void Port_Init() {
-    P1MDOUT |= 0x0D;  //set output pin for CEX0, CEX2 and CEX3 in push-pull mode
+    P1MDOUT |= 0x0F;  //set output pin for CEX0, CEX2 and CEX3 in push-pull mode
     P3MDOUT &= ~0x80; //Set Slideswitch at P3.7 for input
     P3 |= 0x80;
 
@@ -385,11 +390,11 @@ void PreventExtreme(){
     if (PWLeftThrust < PW_MIN){
         PWLeftThrust = PW_MIN;
     }
-    if (PWThrustAngle < PW_MIN){
-        PWThrustAngle = PW_MIN;
+    if (PWRightThrust < PW_MIN){
+        PWRightThrust= PW_MIN;
     }
-    if (PWThrustAngle > PW_MAX){
-        PWThrustAngle = PW_MAX;
+    if (PWRightThrust > PW_MAX){
+        PWRightThrust = PW_MAX;
     }
 }
 
