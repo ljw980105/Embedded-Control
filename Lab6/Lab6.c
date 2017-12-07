@@ -46,11 +46,11 @@ signed int error, prev_error;
 int Kp_temp;
 float Kp, Kd;
 unsigned int counter_PCA = 0;
-int __xdata PWLeftThrust, PWThrustAngle, PWRightThrust, motor_spd;
+signed long __xdata PWLeftThrust, PWThrustAngle, PWRightThrust, motor_spd;
 int __xdata PCA_START = 28614; //65535-36921
 int __xdata PWCtrThrustAngle = 2779; // PulseWidth is about 1.5ms 2769
 int __xdata PWCtrLeftThrust = 2779;
-int __xdata PWCtrRightThrust = 2779;
+int __xdata PWCtrRightThrust = 2779; // needs higher pw
 int PW_MIN = 2031;
 int PW_MAX = 3508;
 unsigned char addr_ranger = 0xE0; // address of ranger
@@ -74,7 +74,8 @@ void main(void)
     SMB_Init();
 
     printf("Embedded Control Pulsewidth Calibration\r\n");
-    PWThrustAngle = 3060; // start out @ vertical
+	// 2900 for gondola 5
+    PWThrustAngle = 3060; // start out @ vertical // 3060 on Gondola 8
     PWLeftThrust = PWCtrLeftThrust;
     PWRightThrust = PWCtrRightThrust;
     PCA0CP1 = 0xFFFF - PWThrustAngle; // thrust angle fan @ CEX1
@@ -150,6 +151,7 @@ void makeThrustVertical(){
             break;
         }
         PreventExtreme();
+		//printf("Right thrust pw is %d\r\n", PWThrustAngle);
         PCA0CP1 = 0xFFFF - PWThrustAngle;
     }
 }
@@ -175,11 +177,14 @@ void update_ranger(){
     }
 }
 
+/*
+ * Enter the 3-bit derivative gain using keyboard
+ */
 void getDerivativeGain(){
-    unsigned int __xdata inputArr[2] = {0,0};
+    unsigned int __xdata inputArr[3] = {0,0,0};
     i = 0;
     printf("Enter Derivative Gain Bit by Bit Using Keyboard\r\n");
-    while(i < 2){
+    while(i < 3){
         printf("enter the digit %d \r\n", i);
         input = getchar();
         input -= 48;
@@ -188,15 +193,16 @@ void getDerivativeGain(){
         i ++;
     }
     // convert to a 4 digit number
-    Kd = inputArr[0]*10 + inputArr[1];
+    Kd = inputArr[0]*100 + inputArr[1] * 10 + inputArr[2];
     printf_fast_f("The Derivatice Gain is %f\r\n",Kd);
 }
 
 void getProportionalGain(){
-    unsigned int __xdata inputArr[2] = {0,0};
+    unsigned int __xdata inputArr[3] = {0,0,0};
     i = 0;
     printf("Enter Proportional Gain Bit by Bit Using Keyboard\r\n");
-    while(i < 2){
+    printf("The Last Bit Is A Decimal\r\n");
+    while(i < 3){
         printf("enter the digit %d \r\n", i);
         input = getchar();
         input -= 48;
@@ -205,7 +211,7 @@ void getProportionalGain(){
         i ++;
     }
     // convert to a 4 digit number
-    Kp = inputArr[0]*10 + inputArr[1];
+    Kp = inputArr[0]*10 + inputArr[1] + 0.1 * inputArr[2];
     printf_fast_f("The Proportional Gain is %f\r\n",Kp);
 }
 
@@ -240,6 +246,7 @@ void update_compass(){
 void maintainHeading(){
     update_compass();
     update_ranger();
+
     error = desired_heading - heading;
     /*
     if (rangerCompareLess(48)){ // if ranger reading is less than 48cm
@@ -248,14 +255,20 @@ void maintainHeading(){
     if (rangerCompareMore(52)){
 
     }*/
+	if (error > 1800){ // if your error is too high, reset it low. this keeps moves efficient
+        error = error - 3600;
+    } else if (error < -1800){ // if error is too high, reset low. this keeps moves efficient
+        error = error + 3600;
+    }
+	
 
     // using control algorithm 6 from worksheet 11
     //PWThrustAngle = (long)PWThrustAngle + (long)(Kp * (long)error) + (long)(Kd * (long)(error - prev_error));
     //PWRightThrust= (int)PWCtrRightThrust - (int)((Kp * (int)(error)) + (int)(Kd * (int)((int)error - (int)prev_error));
     //PWLeftThrust = (int)PWCtrLeftThrust + (int)((Kp * (int)error) + (int)(Kd * (int)((int)error - (int)prev_error));
 
-	PWRightThrust = PWCtrRightThrust + (int)Kp * (int) (error) + (int)Kd * (int) (error - prev_error);
-	PWLeftThrust = PWCtrLeftThrust -   (int)Kp * (int) (error) - (int)Kd * (int) (error - prev_error);
+	PWRightThrust = (signed long) PWCtrRightThrust + (signed long)Kp * (signed long)(error) + (signed long)Kd * (signed long) (error - prev_error);
+	PWLeftThrust = (signed long) PWCtrLeftThrust -  (signed long) Kp * (signed long)(error) - (signed long)Kd * (signed long) (error - prev_error);
 
 	PreventExtreme();
 
@@ -264,7 +277,9 @@ void maintainHeading(){
     PCA0CP3 = 0xFFFF - PWRightThrust; // right thrust fan @ CEX3
 
 	printf("Left thrust PW: %d ", PWLeftThrust);
-	printf("Right thrust PW: %d \r\n", PWRightThrust);
+	printf("Right thrust PW: %d ", PWRightThrust);
+	printf("Error: %d ", error);
+	printf("Current heading is %d \r\n ", heading);
 
     prev_error = error;
 }
