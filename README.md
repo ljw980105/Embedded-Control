@@ -23,6 +23,7 @@ The following are a list of projects completed by us:
 * Lab 3-2: Reading of Compass and Untrasonic Ranger
 * Lab 3-3: Achieving Steering and Speed Control by Combining Ranger and Compass Readings
 * Lab 4: Getting the Smart Car to Drive and Avoid Obstacles
-* Lab 5: Integrating Accelerometer & PID into the Smart Car    
+* Lab 5: Integrating Accelerometer & PID into the Smart Car   
+* Lab 6: PD Control Algorithm Implementation on the Gondola  
 
 #### Thanks for stopping by! :+1:
