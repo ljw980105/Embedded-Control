@@ -11,13 +11,10 @@ void XBR0_Init();
 void SMB_Init(void);
 void PCA_ISR ( void ) __interrupt 9;
 unsigned int ReadCompass (void);
-void adjust_pw(void);
 unsigned int ReadRanger();
 void PreventExtreme(void);
 unsigned char read_AD_input(unsigned char n);
 void ADC_Init(void);
-void adjustServo(void);
-void start_driving(void);
 void update_ranger(void);
 void update_compass(void);
 void updateRangerArray(void);
@@ -43,15 +40,15 @@ unsigned char ranger_count = 0;
 unsigned char increment_flag = 0;
 unsigned char increment_count = 0;
 unsigned char LCD_count = 0;
-unsigned int __xdata desired_heading, heading,multipleInput, i, stops, ranger_distance,initial_heading, original_heading;
-signed int error, prev_error;
+unsigned int __xdata heading,multipleInput, i, stops, ranger_distance,initial_heading, original_heading;
+signed int error, prev_error, desired_heading;
 int Kp_temp;
 float Kp, Kd;
 unsigned int counter_PCA = 0;
 signed long __xdata PWLeftThrust, PWThrustAngle, PWRightThrust, motor_spd;
 unsigned int __xdata PCA_START = 28614; //65535-36921
 unsigned int __xdata PWCtrThrustAngle = 2779; // PulseWidth is about 1.5ms 2769
-unsigned int __xdata PWCtrLeftThrust = 2779;
+unsigned int __xdata PWCtrLeftThrust = 2759;
 unsigned int __xdata PWCtrRightThrust = 2779; // needs higher pw
 unsigned int PW_MIN = 2031;
 unsigned int PW_MAX = 3508;
@@ -64,8 +61,7 @@ __sbit __at 0xB7 SS; // slide switch to enable/ disable servo and motor at P3.7
 //-----------------------------------------------------------------------------
 // Main Function
 //-----------------------------------------------------------------------------
-void main(void)
-{
+void main(void) {
     // initialize board
     Sys_Init();
     putchar(' ');
@@ -76,8 +72,8 @@ void main(void)
     SMB_Init();
 
     printf("Embedded Control Pulsewidth Calibration\r\n");
-	// 2900 for gondola 5 gondola 8 3060 gondola 2 2480 gondola 9 2360
-    PWThrustAngle = 2700; // start out @ vertical \
+	// 2900 for gondola 5 gondola 8 3060 gondola 2 2480 gondola 9 2360 gondola 5 2900
+    PWThrustAngle = 2780; // start out @ vertical
     PWLeftThrust = PWCtrLeftThrust;
     PWRightThrust = PWCtrRightThrust;
     PCA0CP1 = 0xFFFF - PWThrustAngle; // thrust angle fan @ CEX1
@@ -90,16 +86,11 @@ void main(void)
     getDerivativeGain();
     getProportionalGain();
     makeThrustVertical();
-	// optimal gain: 110 for kd and 0.27 for kp
+	// optimal gain: 100 for kd and 0.27 for kp
 	original_heading = desired_heading;
 
     while(1) {
         maintainHeading();
-		//PWRightThrust = PWCtrRightThrust + 200 ;
-	    //PWLeftThrust = PWCtrLeftThrust - 200 ;
-
-    	//PCA0CP2 = 0xFFFF - PWLeftThrust; // left thrust fan @ CEX2
-    	//PCA0CP3 = 0xFFFF - PWRightThrust; // right thrust fan @ CEX3
     }
 }
 
@@ -112,7 +103,7 @@ void updateRangerArray(){
 }
 
 /*
- * All 2 values in the array have to be below the limit before the function returns true
+ * All 2 values in the array have to be above the limit before the function returns true
  * Prevents the problem where ranger values randomly spike to -1 from happening
  */
 unsigned int rangerCompareLess(unsigned int limit){
@@ -123,6 +114,10 @@ unsigned int rangerCompareLess(unsigned int limit){
     return 1;
 }
 
+/*
+ * All 2 values in the array have to be below the limit before the function returns true
+ * Prevents the problem where ranger values randomly spike to -1 from happening
+ */
 unsigned int rangerCompareMore(unsigned int limit){
     i = 0;
     for(i = 0; i < 2; i++){
@@ -132,17 +127,9 @@ unsigned int rangerCompareMore(unsigned int limit){
 }
 
 /*
- * All 2 values in the array have to be below the limit before the function returns true
- * Prevents the problem where ranger values randomly spike to -1 from happening
+ * Using the keyboard, adjust the pw for the angle using + or -. Increment interval is 20 and entering a e
+ * exits this function
  */
-unsigned int rangerCompare(unsigned int limit){
-    i = 0;
-    for(i = 0; i < 2; i++){
-        if (RangerArray[i] >= limit) return 0;
-    }
-    return 1;
-}
-
 void makeThrustVertical(){
     printf("Adjust thrust angle using + and - to make sure they are vertical. Key in 'e' to exit \r\n");
     while (1){
@@ -160,13 +147,6 @@ void makeThrustVertical(){
 }
 
 /*
- * sets proper pulsewidth for the motor
- */
-void start_driving(){
-    PCA0CP2 = 0xFFFF - PWThrustAngle;
-}
-
-/*
  * Read and update range values
  */
 void update_ranger(){
@@ -175,8 +155,21 @@ void update_ranger(){
         //start a ping
         RangerData[0] = 0x51; // write 0x51 to reg 0 of the ranger:
         i2c_write_data(addr_ranger, 0, RangerData, 1); // write one byte of data to reg 0 at addr
-        new_range = 0; //clear new range flag
 		updateRangerArray(); // append range data to the queue
+
+		if (rangerCompareLess(40)){ // if ranger reading is less than 48cm
+			desired_heading -= 20;
+			if (desired_heading < 0){
+				desired_heading += 3600;
+			}
+    	}
+    	if (rangerCompareMore(60)){ // if ranger reading is greater than 52cm
+			desired_heading += 20; 
+			if (desired_heading > 3600){
+				desired_heading -= 3600;
+			}
+		}
+		new_range = 0; //clear new range flag	
     }
 }
 
@@ -200,11 +193,14 @@ void getDerivativeGain(){
     printf_fast_f("The Derivatice Gain is %f\r\n",Kd);
 }
 
+/*
+ * Entered the 4-bit proportional gain using keyboard. The last two bits entered are decimal(fractions)
+ */
 void getProportionalGain(){
     unsigned int __xdata inputArr[4] = {0,0,0,0};
     i = 0;
     printf("Enter Proportional Gain Bit by Bit Using Keyboard\r\n");
-    printf("The Two Bits Are Fraction\r\n");
+    printf("The Last Two Bits Are Fractions\r\n");
     while(i < 4){
         printf("enter the digit %d \r\n", i);
         input = getchar();
@@ -213,11 +209,14 @@ void getProportionalGain(){
         inputArr[i] = input;
         i ++;
     }
-    // convert to a 4 digit number
+    // convert to a float number in the form of wx.yz
     Kp = inputArr[0]*10 + inputArr[1] + 0.1 * inputArr[2] + 0.01 * inputArr[3];
     printf_fast_f("The Proportional Gain is %f\r\n",Kp);
 }
 
+/*
+ * Enter the 4-bit derivative gain using keyboard
+ */
 void getDesiredHeading(){
     unsigned int __xdata inputArr[4] = {0,0,0,0};
     i = 0;
@@ -235,19 +234,21 @@ void getDesiredHeading(){
     printf("The desired heading is %d\r\n", desired_heading);
 }
 
+/*
+ * Update the current heading every 80ms
+ */
 void update_compass(){
-    if (new_heading){
+    if (new_heading){ // if every 80 ms
         heading = ReadCompass();
         new_heading = 0;
     }
 }
 
-
 /*
  * Maintain desired heading using 2 thrust fans
  */
 void maintainHeading(){
-    update_compass();
+    update_compass(); // get the newest ranger and compass readings
     update_ranger();
 
     error = desired_heading - heading;
@@ -258,58 +259,52 @@ void maintainHeading(){
         error = error + 3600;
     }
 
-	
+	/*
     if (rangerCompareLess(48)){ // if ranger reading is less than 48cm
-		if (increment_flag){
-			desired_heading -= 100;
-			if (desired_heading < (original_heading - 1800)){
-				desired_heading = (original_heading - 1800);
+		//printf("rang_comp less than48\r\n");
+		//printf("increment flag is %d",increment_flag);
+		//if (increment_flag){
+			desired_heading -= 1;
+			if (desired_heading < -1800){
+				desired_heading = - 1800;
 			}
-			increment_flag = 0;
-		}
+			//increment_flag = 0;
+		//}
     }
     if (rangerCompareMore(52)){
+		//printf("rang_comp greater than52\r\n");
+		//printf("increment flag is %d",increment_flag);
 		if (increment_flag){
-			desired_heading += 100;
-			if (desired_heading > (original_heading + 1800)){
-				desired_heading = (original_heading + 1800);
+			desired_heading += 1;
+			if (desired_heading > 1800){
+				desired_heading = 1800;
 			}
-			increment_flag = 0;
-		}
+			//increment_flag = 0;
+		//}
     }
+	*/
 	
-
     // using control algorithm 6 from worksheet 11
 	PWRightThrust = (signed long) PWCtrRightThrust + Kp * (signed long)(error) + (signed long)Kd * (signed long) (error - prev_error);
 	PWLeftThrust = (signed long) PWCtrLeftThrust -  Kp * (signed long)(error) - (signed long)Kd * (signed long) (error - prev_error);
 
+    //makes sure the pulse widths are within the required limit
 	PreventExtreme();
 
     //PCA0CP1 = 0xFFFF - PWThrustAngle; // thrust angle fan @ CEX1
     PCA0CP2 = 0xFFFF - PWLeftThrust; // left thrust fan @ CEX2
     PCA0CP3 = 0xFFFF - PWRightThrust; // right thrust fan @ CEX3
 
-	if (print_flag){
+	if (print_flag){ // print the information every 200ms so SecureCRT won't become too cluttered
 		printf("Left thrust PW: %ld ", PWLeftThrust);
 		printf("Right thrust PW: %ld ", PWRightThrust);
 		printf("Error: %d ", error);
-		printf("Current heading is %d \r\n ", heading);
+		printf("Current H: %d ", heading);
+		printf("Desired H: %d ", desired_heading);
+		printf("Ranger: %d\r\n",ranger_distance);
 		print_flag = 0;
 	}
-
     prev_error = error;
-}
-
-/*
- * adjust the servo direction by adjusting the current heading to match the desired heading
- */
-void adjustServo(){
-    error = desired_heading - heading; // set error
-    if (new_heading) { // 40 ms passed
-        heading = ReadCompass(); // set heading to heading reported by electronic compass
-        adjust_pw(); // run adj pw function
-        new_heading = 0;
-    }
 }
 
 /*
@@ -367,7 +362,7 @@ void PCA_ISR ( void ) __interrupt 9 {
             print_flag = 1;
             LCD_count = 0;
         }
-		if (increment_count > 25){
+		if (increment_count >= 24){
 			increment_flag = 1;
 			increment_count = 0;
 		}
@@ -383,21 +378,6 @@ unsigned int ReadCompass(){
     i2c_read_data(addr_compass,2,CompassData,2);   //adress, byte to start, where to story, how many bytes to read
     heading = ((CompassData[0] << 8) | CompassData[1]); // turn 2 8-bit into one 16 bit
     return heading;
-}
-
-/*
- * Utilize the proportional gain method to adjust heading
- */
-void adjust_pw() {
-
-    if (error > 1800){ // if your error is too high, reset it low. this keeps moves efficient
-        error = error - 3600;
-    } else if (error < -1800){ // if error is too high, reset low. this keeps moves efficient
-        error = error + 3600;
-    }
-    PWLeftThrust = Kp*(error) + PWCtrLeftThrust + 100; // set new PW
-    PCA0CPL0 = 0xFFFF - PWLeftThrust;
-    PCA0CPH0 = (0xFFFF - PWLeftThrust) >> 8;
 }
 
 /*
