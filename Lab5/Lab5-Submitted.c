@@ -46,7 +46,6 @@ unsigned int PW_CENTER_MOTOR = 2779; // PulseWidth is about 1.5ms 2769
 unsigned int PW_CTR_SERVO = 2969;
 unsigned int PW_MIN = 2031; // 1.1ms full reverse
 unsigned int PW_MAX = 3508; // 1.9ms full forward
-
 signed int __xdata avg_gx,avg_gy,gx,gy, gx_offset, gy_offset;
 unsigned char __xdata AccelData[4];
 unsigned int __xdata isFlatArr[5]= {0,0,0,0,0}; // determine when the car stops at the top of ramp -> also a queue DS
@@ -251,7 +250,8 @@ void set_driving_pw(){
     PW_Motor = PW_CENTER_MOTOR + kdy * gy;
     PW_Motor += kdx * abs(gx);
 
-    /* //Optional - use integral gain
+    //Optional - use integral gain
+    /*
     PW_Motor += kdx * abs(gx) + ki * error_sum //ki is the integral gain error_sum += gy + abs(gx)
     error_sum += gy + abs(gx)
     */
@@ -285,7 +285,7 @@ void updateFlatArr(){
 
 /*
  * If the array is with the flat range (abs(gy) < 16) for 5*20 = 100 ms, then we
- * can determine that the car has reached the top of ramp, hence returning 1
+ * can determine that the car has reached the top of ramp, hence returning 1.
  * 2 out of 5 values in the array have to be below the limit for the fn to return true
  */
 unsigned int isFlat(void){
@@ -296,7 +296,7 @@ unsigned int isFlat(void){
     }
     if (flat_counter >= 2) return 1;
 	return 0;
-}W
+}
 
 /*
  * Implement a queue data structure for PW_Motor values:
@@ -362,11 +362,11 @@ unsigned int Update_Value(int Constant, unsigned char incr, int maxval, int minv
     int deflt = Kfront_back_pitch;
     char input = 0;
     while(1) {
-        if (mode == 1) input = getchar();
-        if (mode == 2){
-			while (read_keypad() == 0xFF) input = read_keypad();
-		}
-        input -= 48;// convert from ascii to decimal
+        if (mode == 1) {
+            input = getchar();
+            input -= 48;// convert from ascii to decimal
+        }
+        if (mode == 2) input = kpd_input(0);
         if (input == 'c') Constant = deflt;
         if (input == 'i'){
             Constant += incr;
