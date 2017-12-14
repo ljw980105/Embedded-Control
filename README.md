@@ -26,4 +26,9 @@ The following are a list of projects completed by us:
 * Lab 5: Integrating Accelerometer & PID into the Smart Car   
 * Lab 6: PD Control Algorithm Implementation on the Gondola  
 
+## View All Its Glory In This Video Below!
+<a align="center" href="http://www.youtube.com/watch?feature=player_embedded&v=UfkjDzoJh3E
+" target="_blank"><img src="http://img.youtube.com/vi/UfkjDzoJh3E/0.jpg" 
+alt="Embedded Control" width="240" height="180" border="10" /></a>
+
 #### Thanks for stopping by! :+1:
